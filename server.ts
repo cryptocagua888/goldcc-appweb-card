@@ -1,5 +1,4 @@
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
@@ -11,23 +10,22 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
-  try {
-    const app = express();
-    const PORT = 3000;
+  const app = express();
+  const PORT = 3000;
 
-    app.use(cors());
-    app.use(express.json());
+  app.use(cors());
+  app.use(express.json());
 
-    // Health check endpoint
-    app.get("/api/health", (req, res) => {
-      res.json({ 
-        status: "ok", 
-        env: {
-          hasGasUrl: !!process.env.GAS_WEBAPP_URL,
-          nodeEnv: process.env.NODE_ENV
-        }
-      });
+  // Health check endpoint
+  app.get("/api/health", (req, res) => {
+    res.json({ 
+      status: "ok", 
+      env: {
+        hasGasUrl: !!process.env.GAS_WEBAPP_URL,
+        nodeEnv: process.env.NODE_ENV
+      }
     });
+  });
 
   // API Route to fetch client data via Google Apps Script Proxy
   app.get("/api/client/:id", async (req, res) => {
@@ -38,66 +36,50 @@ async function startServer() {
     console.log(`[Proxy] Solicitud de datos para: ${clientId}`);
 
     if (!gasUrl || gasUrl.includes("YOUR_APPS_SCRIPT")) {
-      console.error("[Proxy] Error: GAS_WEBAPP_URL no configurado correctamente.");
+      console.error("[Proxy] Error: GAS_WEBAPP_URL no configurado.");
       return res.status(500).json({ 
-        error: "Servidor no configurado. Falta la URL de Google Apps Script en los secretos." 
+        error: "Servidor no configurado. Falta GAS_WEBAPP_URL en los secretos." 
       });
     }
 
     try {
-      // Limpiar la URL de posibles espacios accidentales
       const cleanGasUrl = gasUrl.trim();
       const separator = cleanGasUrl.includes("?") ? "&" : "?";
       const targetUrl = `${cleanGasUrl}${separator}action=getCliente&cliente=${encodeURIComponent(clientId)}&key=${encodeURIComponent(key as string)}`;
       
-      console.log(`[Proxy] Llamando a GAS: ${targetUrl}`);
-      
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20 segs
+
       const response = await fetch(targetUrl, {
         method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Criptocagua-Gold-App/1.0'
-        }
+        headers: { 'Accept': 'application/json' },
+        signal: controller.signal
       });
 
-      console.log(`[Proxy] Respuesta de Google received. Status: ${response.status}`);
+      clearTimeout(timeoutId);
 
       const contentType = response.headers.get("content-type");
-
       if (!contentType || !contentType.includes("application/json")) {
         const textError = await response.text();
-        console.error(`[Proxy] Error de Google (No-JSON): ${textError.substring(0, 500)}`);
-        
-        // Si es un error de redirección o login, informar al usuario
-        if (textError.includes("Google Accounts") || textError.includes("login") || textError.includes("Service Login")) {
-          return res.status(502).json({ 
-            error: "Error de Permisos: Google Apps Script requiere iniciar sesión. Asegúrate de que la implementación esté configurada para 'Anyone' (Cualquiera)." 
-          });
+        if (textError.includes("Google Accounts") || textError.includes("login")) {
+          return res.status(502).json({ error: "Permisos: Configura GAS para 'Anyone'." });
         }
-
-        return res.status(502).json({ 
-          error: `Google respondió con un error técnico. Revisa que el script esté bien instalado. (${textError.substring(0, 100)})` 
-        });
+        return res.status(502).json({ error: "Google respondió con error (HTML)." });
       }
 
       const data = await response.json();
-      console.log("[Proxy] JSON decodificado exitosamente.");
-
       if (response.status !== 200 || data.error) {
-        console.warn(`[Proxy] Google devolvió un error lógico: ${data.error}`);
-        return res.status(400).json({ error: data.error || "Error en el servidor de Google Sheets" });
+        return res.status(400).json({ error: data.error || "Error en Google Sheets" });
       }
 
       res.json(data);
     } catch (error: any) {
-      console.error("[Proxy] ERROR CRÍTICO:", error);
-      res.status(500).json({ 
-        error: `Fallo de conexión total: ${error.message}. Verifica que la URL sea correcta y no tenga espacios.` 
-      });
+      console.error("[Proxy] ERROR:", error.message);
+      res.status(500).json({ error: `Connection failed: ${error.message}` });
     }
   });
 
-  // API Route to submit a general request (loan, withdrawal, third-party payment)
+  // API Request submission
   app.post("/api/request", async (req, res) => {
     const gasUrl = process.env.GAS_WEBAPP_URL;
     if (!gasUrl) return res.status(500).json({ error: "GAS_WEBAPP_URL not configured" });
@@ -119,7 +101,7 @@ async function startServer() {
     }
   });
 
-  // API Route to update security key
+  // API Update key
   app.post("/api/update-key", async (req, res) => {
     const gasUrl = process.env.GAS_WEBAPP_URL;
     if (!gasUrl) return res.status(500).json({ error: "GAS_WEBAPP_URL not configured" });
@@ -141,8 +123,9 @@ async function startServer() {
     }
   });
 
-  // Vite middleware for development
+  // Assets and SPA
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -156,16 +139,20 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
-  } catch (startupError: any) {
-    console.error("FATAL STARTUP ERROR:", startupError);
-    process.exit(1);
+  // Only listen if NOT in a serverless environment (Vercel sets VERCEL=1)
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
   }
+
+  return app;
 }
 
-startServer().catch(err => {
-  console.error("UNHANDLED STARTUP REJECTION:", err);
-  process.exit(1);
-});
+// Handler for Vercel
+const appPromise = startServer();
+
+export default async (req: any, res: any) => {
+  const app = await appPromise;
+  app(req, res);
+};
