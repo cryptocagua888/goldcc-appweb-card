@@ -172,12 +172,23 @@ function Portfolio() {
             <h2 className="text-xl font-serif italic text-gold">Aviso de Seguridad</h2>
             <p className="text-text-dim text-sm leading-relaxed">{error}</p>
           </div>
-          <button 
-            onClick={() => navigate('/')}
-            className="w-full py-4 border border-gold text-gold font-sans font-bold uppercase tracking-widest text-xs hover:bg-gold hover:text-bg-deep transition-all"
-          >
-            Regresar al Portal
-          </button>
+          <div className="space-y-4">
+            <button 
+              onClick={() => navigate('/')}
+              className="w-full py-4 border border-gold text-gold font-sans font-bold uppercase tracking-widest text-xs hover:bg-gold hover:text-bg-deep transition-all"
+            >
+              Regresar al Portal
+            </button>
+            <button 
+              onClick={() => {
+                const gas = (import.meta as any).env?.VITE_GAS_WEBAPP_URL || "No configurada";
+                alert(`DIAGNÓSTICO DE CONFIGURACIÓN:\n\n1. URL detectada: "${gas}"\n2. Longitud: ${gas.length} carácteres\n3. Espacios detectados: ${gas.trim().length !== gas.length ? 'SÍ (⚠️ Borra los espacios en Vercel)' : 'NO'}\n4. URL de ejemplo detectada: ${gas.includes('YOUR_APPS_SCRIPT') ? 'SÍ (⚠️ Tienes que poner tu propia URL)' : 'NO'}\n\nRECUERDA: La URL debe terminar en /exec`);
+              }}
+              className="w-full py-2 text-text-dim hover:text-white transition-all text-[9px] uppercase tracking-widest opacity-50"
+            >
+              🛠️ Diagnosticar Escritura
+            </button>
+          </div>
         </div>
       </div>
     );
