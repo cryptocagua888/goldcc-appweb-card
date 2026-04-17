@@ -24,9 +24,18 @@ import {
   ShieldCheck,
   ArrowDownCircle,
   PiggyBank,
-  Key
+  Key,
+  MessageCircle,
+  ArrowUpRight,
+  UserPlus,
+  RefreshCw,
+  PlusCircle,
+  MessageSquare,
+  X
 } from "lucide-react";
 import AssetCard from "./components/AssetCard";
+
+const WHATSAPP_NUMBER = "584120000000"; // Reemplaza con tu número real
 
 interface ClientData {
   cliente: string;
@@ -48,6 +57,18 @@ function Portfolio() {
   const [data, setData] = useState<ClientData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Estados de Solicitudes
+  const [showRequestModal, setShowRequestModal] = useState(false);
+  const [requestType, setRequestType] = useState<"loan" | "third-party" | "withdrawal" | "key" | null>(null);
+  const [requestStatus, setRequestStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [formError, setFormError] = useState<string | null>(null);
+
+  // Estados de Formulario
+  const [amount, setAmount] = useState("");
+  const [details, setDetails] = useState("");
+  const [newKey, setNewKey] = useState("");
+  const [assetType, setAssetType] = useState("$-L");
 
   useEffect(() => {
     async function fetchData() {
@@ -71,6 +92,50 @@ function Portfolio() {
     }
     fetchData();
   }, [clientId, key]);
+
+  const handleRequestSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setRequestStatus("loading");
+    setFormError(null);
+
+    try {
+      if (requestType === "key") {
+        const res = await fetch("/api/update-key", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cliente: clientId, oldKey: key, newKey })
+        });
+        const result = await res.json();
+        if (result.error) throw new Error(result.error);
+        setRequestStatus("success");
+      } else {
+        const payload = {
+          cliente: clientId,
+          tipo: requestType,
+          monto: amount,
+          detalles: details,
+          balance_estimado: (data?.btcUsd ?? 0) + (data?.latamUsd ?? 0) + (data?.goldUsd ?? 0),
+          activo: requestType === "withdrawal" ? assetType : "USD"
+        };
+        const res = await fetch("/api/request", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        if (result.error) throw new Error(result.error);
+        setRequestStatus("success");
+      }
+    } catch (err: any) {
+      setFormError(err.message);
+      setRequestStatus("error");
+    }
+  };
+
+  const openWhatsApp = () => {
+    const message = encodeURIComponent(`Hola, soy cliente de Criptocagua Gold (${clientId}) y necesito ayuda.`);
+    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, "_blank");
+  };
 
   if (loading) {
     return (
@@ -117,6 +182,21 @@ function Portfolio() {
         </div>
         <div className="client-id text-[10px] text-text-dim tracking-[2px] uppercase font-bold hidden sm:block">
           CLIENT ID: #CCG-{clientId?.split('@')[0].toUpperCase()}
+        </div>
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={() => { setRequestType("key"); setShowRequestModal(true); setRequestStatus("idle"); }}
+            className="p-2 text-text-dim hover:text-gold transition-colors"
+            title="Actualizar Llave"
+          >
+            <RefreshCw className="w-5 h-5" />
+          </button>
+          <button 
+            onClick={() => setShowRequestModal(true)}
+            className="bg-gold px-6 py-2.5 text-bg-deep font-sans font-bold uppercase tracking-[2px] text-[10px] hover:bg-gold-dim transition-all"
+          >
+            Área de Solicitudes
+          </button>
         </div>
       </header>
 
@@ -208,6 +288,14 @@ function Portfolio() {
               "Sus activos GLDCC se han ajustado según el último cierre de la hoja de cálculo corporativa. La próxima sincronización con Google Sheets se realizará en 24h."
             </p>
           </motion.div>
+
+          <button 
+            onClick={openWhatsApp}
+            className="w-full py-6 border border-green-500/30 bg-green-500/5 text-green-500 font-sans font-bold uppercase tracking-[3px] text-[10px] hover:bg-green-500 hover:text-bg-deep transition-all flex items-center justify-center gap-3"
+          >
+            <MessageSquare className="w-4 h-4" />
+            Asistencia WhatsApp
+          </button>
         </aside>
       </main>
 
@@ -220,6 +308,197 @@ function Portfolio() {
           Last SYNC: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()} UTC
         </div>
       </footer>
+
+      {/* Requests Modal */}
+      <AnimatePresence>
+        {showRequestModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-bg-deep/95 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-bg-panel border border-border-accent w-full max-w-2xl relative overflow-hidden shadow-[0_0_50px_rgba(197,160,89,0.1)]"
+            >
+              <button 
+                onClick={() => { setShowRequestModal(false); setRequestType(null); setFormError(null); setRequestStatus("idle"); }}
+                className="absolute top-6 right-6 text-text-dim hover:text-gold transition-colors z-[110]"
+              >
+                <X className="w-6 h-6" />
+              </button>
+
+              <div className="p-10 lg:p-16">
+                {!requestType ? (
+                  <div className="space-y-10">
+                    <div className="space-y-3">
+                      <h2 className="text-4xl lg:text-5xl font-serif italic text-gold leading-tight">Centro de <br />Solicitudes</h2>
+                      <p className="text-text-dim text-sm tracking-wide">Seleccione el servicio exclusivo que desea gestionar hoy.</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                      <button 
+                        onClick={() => { setRequestType("loan"); setRequestStatus("idle"); }}
+                        className="p-8 border border-border-accent bg-bg-card hover:border-gold/50 transition-all text-left flex flex-col gap-5 group"
+                      >
+                        <PlusCircle className="w-10 h-10 text-gold group-hover:scale-110 transition-transform" />
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-[3px] text-text-main">Solicitar Préstamo</p>
+                          <p className="text-[10px] text-text-dim mt-2 leading-relaxed italic">Disponibilidad inmediata según su línea de crédito.</p>
+                        </div>
+                      </button>
+
+                      <button 
+                        onClick={() => { setRequestType("third-party"); setRequestStatus("idle"); }}
+                        className="p-8 border border-border-accent bg-bg-card hover:border-gold/50 transition-all text-left flex flex-col gap-5 group"
+                      >
+                        <UserPlus className="w-10 h-10 text-gold group-hover:scale-110 transition-transform" />
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-[3px] text-text-main">Pago a Terceros</p>
+                          <p className="text-[10px] text-text-dim mt-2 leading-relaxed italic">Gestione sus compromisos con cargo a su préstamo.</p>
+                        </div>
+                      </button>
+
+                      <button 
+                        onClick={() => { setRequestType("withdrawal"); setRequestStatus("idle"); }}
+                        className="p-8 border border-border-accent bg-bg-card hover:border-gold/50 transition-all text-left flex flex-col gap-5 group"
+                      >
+                        <ArrowUpRight className="w-10 h-10 text-gold group-hover:scale-110 transition-transform" />
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-[3px] text-text-main">Retiro de Activos</p>
+                          <p className="text-[10px] text-text-dim mt-2 leading-relaxed italic">Transferencia de tokens a su wallet personal.</p>
+                        </div>
+                      </button>
+
+                      <button 
+                        onClick={() => { setRequestType("key"); setRequestStatus("idle"); }}
+                        className="p-8 border border-border-accent bg-bg-card hover:border-gold/50 transition-all text-left flex flex-col gap-5 group"
+                      >
+                        <Key className="w-10 h-10 text-gold group-hover:scale-110 transition-transform" />
+                        <div>
+                          <p className="text-xs font-bold uppercase tracking-[3px] text-text-main">Actualizar Llave</p>
+                          <p className="text-[10px] text-text-dim mt-2 leading-relaxed italic">Refuerce la seguridad de su acceso maestro.</p>
+                        </div>
+                      </button>
+                    </div>
+                  </div>
+                ) : requestStatus === "success" ? (
+                  <div className="text-center py-20 space-y-8 animate-in fade-in zoom-in duration-300">
+                    <div className="w-24 h-24 bg-gold/10 rounded-full flex items-center justify-center mx-auto border border-gold/20 shadow-[0_0_30px_rgba(197,160,89,0.1)]">
+                      <ShieldCheck className="w-12 h-12 text-gold" />
+                    </div>
+                    <div className="space-y-3">
+                      <h3 className="text-3xl font-serif italic text-text-main">Solicitud Registrada</h3>
+                      <p className="text-text-dim text-sm max-w-sm mx-auto leading-relaxed">Su requerimiento está siendo procesado bajo estrictos protocolos de seguridad. Recibirá una notificación en breve.</p>
+                    </div>
+                    <button 
+                      onClick={() => { setShowRequestModal(false); setRequestType(null); }}
+                      className="px-12 py-5 bg-gold text-bg-deep font-sans font-bold uppercase tracking-[4px] text-[10px] hover:bg-gold-dim transition-all"
+                    >
+                      Cerrar Panel
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-10">
+                    <div className="flex items-center gap-6">
+                      <button 
+                        onClick={() => { setRequestType(null); setFormError(null); }}
+                        className="text-text-dim hover:text-gold transition-colors text-[10px] uppercase tracking-[3px] font-bold"
+                      >
+                        ← Volver
+                      </button>
+                      <h2 className="text-3xl font-serif italic text-gold">
+                        {requestType === "loan" && "Solicitud de Préstamo"}
+                        {requestType === "third-party" && "Pago a Terceros"}
+                        {requestType === "withdrawal" && "Retiro de Activos"}
+                        {requestType === "key" && "Firma de Seguridad"}
+                      </h2>
+                    </div>
+
+                    <form onSubmit={handleRequestSubmit} className="space-y-8">
+                      {requestType === "key" ? (
+                        <div className="space-y-6">
+                           <div className="p-6 bg-gold/5 border border-gold/10 text-[10px] text-gold uppercase tracking-[1px] leading-relaxed italic">
+                            Advertencia: Al cambiar su llave maestro, todas las sesiones activas en otros dispositivos serán finalizadas por seguridad.
+                          </div>
+                          <div className="space-y-3">
+                            <label className="text-[10px] uppercase font-bold tracking-[3px] text-text-dim block px-1">Nueva Llave Maestro</label>
+                            <input 
+                              type="password"
+                              value={newKey}
+                              onChange={(e) => setNewKey(e.target.value)}
+                              placeholder="Firma electrónica segura"
+                              className="w-full bg-bg-deep border border-border-accent p-6 text-text-main focus:border-gold outline-none text-sm placeholder:opacity-20 transition-all font-mono"
+                              required
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="space-y-8">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                            <div className="space-y-3">
+                              <label className="text-[10px] uppercase font-bold tracking-[3px] text-text-dim block px-1">Monto en USD</label>
+                              <input 
+                                type="number"
+                                step="any"
+                                value={amount}
+                                onChange={(e) => setAmount(e.target.value)}
+                                placeholder="0.00"
+                                className="w-full bg-bg-deep border border-border-accent p-6 text-text-main focus:border-gold outline-none text-sm placeholder:opacity-20 transition-all font-mono"
+                                required
+                              />
+                            </div>
+                            
+                            {requestType === "withdrawal" && (
+                              <div className="space-y-3">
+                                <label className="text-[10px] uppercase font-bold tracking-[3px] text-text-dim block px-1">Instrumento</label>
+                                <select 
+                                  value={assetType}
+                                  onChange={(e) => setAssetType(e.target.value)}
+                                  className="w-full bg-bg-deep border border-border-accent p-6 text-text-main focus:border-gold outline-none text-sm appearance-none transition-all cursor-pointer"
+                                >
+                                  <option value="$-L">Dolar Latam ($-L)</option>
+                                  <option value="BTC">Bitcoin (BTC)</option>
+                                  <option value="GLDCC">Cagua Gold (GLDCC)</option>
+                                </select>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="space-y-3">
+                            <label className="text-[10px] uppercase font-bold tracking-[3px] text-text-dim block px-1">
+                              {requestType === "third-party" ? "Credenciales del Beneficiario" : "Memorándum / Notas"}
+                            </label>
+                            <textarea 
+                              value={details}
+                              onChange={(e) => setDetails(e.target.value)}
+                              placeholder={requestType === "third-party" ? "Nombre completo, Banco, Documento de Identidad..." : "Detalles adicionales para el gestor..."}
+                              className="w-full bg-bg-deep border border-border-accent p-6 text-text-main focus:border-gold outline-none text-sm min-h-[140px] placeholder:opacity-20 transition-all font-serif italic"
+                              required={requestType === "third-party" || requestType === "withdrawal"}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {formError && (
+                        <div className="p-5 bg-red-400/5 border border-red-400/20 text-red-400 text-[10px] font-sans uppercase tracking-[2px] animate-pulse">
+                          {formError}
+                        </div>
+                      )}
+
+                      <button 
+                        type="submit"
+                        disabled={requestStatus === "loading"}
+                        className="w-full py-6 bg-gold text-bg-deep font-sans font-bold uppercase tracking-[5px] text-[10px] hover:bg-gold-dim transition-all disabled:opacity-50 active:scale-[0.98]"
+                      >
+                        {requestStatus === "loading" ? "Validando Firma..." : "Sellar Solicitud"}
+                      </button>
+                    </form>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

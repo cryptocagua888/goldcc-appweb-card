@@ -31,7 +31,7 @@ async function startServer() {
     }
 
     try {
-      const targetUrl = `${gasUrl}?cliente=${encodeURIComponent(clientId)}&key=${encodeURIComponent(key as string)}`;
+      const targetUrl = `${gasUrl}?action=getCliente&cliente=${encodeURIComponent(clientId)}&key=${encodeURIComponent(key as string)}`;
       
       const response = await fetch(targetUrl);
       const data = await response.json();
@@ -44,6 +44,48 @@ async function startServer() {
     } catch (error: any) {
       console.error("Error fetching from GAS:", error);
       res.status(500).json({ error: "Error al conectar con Google Apps Script: " + error.message });
+    }
+  });
+
+  // API Route to submit a general request (loan, withdrawal, third-party payment)
+  app.post("/api/request", async (req, res) => {
+    const gasUrl = process.env.GAS_WEBAPP_URL;
+    if (!gasUrl) return res.status(500).json({ error: "GAS_WEBAPP_URL not configured" });
+
+    try {
+      const response = await fetch(gasUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "submitRequest",
+          ...req.body
+        })
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // API Route to update security key
+  app.post("/api/update-key", async (req, res) => {
+    const gasUrl = process.env.GAS_WEBAPP_URL;
+    if (!gasUrl) return res.status(500).json({ error: "GAS_WEBAPP_URL not configured" });
+
+    try {
+      const response = await fetch(gasUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "updateKey",
+          ...req.body
+        })
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (error: any) {
+      res.status(500).json({ error: error.message });
     }
   });
 
