@@ -35,7 +35,7 @@ import {
 } from "lucide-react";
 import AssetCard from "./components/AssetCard";
 
-const WHATSAPP_NUMBER = "584120000000"; // Reemplaza con tu número real
+const WHATSAPP_NUMBER = import.meta.env.VITE_WHATSAPP_NUMBER || "584120000000";
 
 interface ClientData {
   cliente: string;
@@ -111,6 +111,7 @@ function Portfolio() {
       } else {
         const payload = {
           cliente: clientId,
+          key: key, // Incluimos la llave para validación en GAS
           tipo: requestType,
           monto: amount,
           detalles: details,

@@ -58,6 +58,7 @@ async function startServer() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "submitRequest",
+          adminEmail: process.env.ADMIN_EMAIL,
           ...req.body
         })
       });
@@ -79,6 +80,7 @@ async function startServer() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "updateKey",
+          adminEmail: process.env.ADMIN_EMAIL,
           ...req.body
         })
       });
