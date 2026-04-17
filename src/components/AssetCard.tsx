@@ -34,7 +34,7 @@ export default function AssetCard({ name, symbol, amount, amountUsd, icon: Icon,
           {amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 8 })}
         </h3>
         <p className="text-text-dim text-sm font-sans">
-          ≈ ${amountUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+          ≈ {amountUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDT
         </p>
       </div>
       

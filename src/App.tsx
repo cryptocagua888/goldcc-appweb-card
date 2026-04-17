@@ -88,13 +88,13 @@ function Portfolio() {
 
   useEffect(() => {
     console.log("[Portfolio] Iniciando carga de datos...");
-    async function fetchData() {
+    async function fetchData(silent = false) {
       if (!clientId) {
         console.warn("[Portfolio] clientId no detectado");
         return;
       }
       try {
-        setLoading(true);
+        if (!silent) setLoading(true);
         const url = `/api/client/${clientId}${sessionKey ? `?key=${sessionKey}` : ""}`;
         console.log(`[Portfolio] Llamando a: ${url}`);
         const response = await fetch(url);
@@ -120,12 +120,23 @@ function Portfolio() {
         setError(null);
       } catch (err: any) {
         console.error("[Portfolio] Capturado:", err.message);
-        setError(err.message);
+        // Solo mostrar error visual si no es una actualización silenciosa 
+        // o si es la primera carga y falló.
+        if (!silent || !data) setError(err.message);
       } finally {
-        setLoading(false);
+        if (!silent) setLoading(false);
       }
     }
+    
     fetchData();
+
+    // Actualización automática cada 5 minutos
+    const interval = setInterval(() => {
+      console.log("[Portfolio] Auto-refresh de datos...");
+      fetchData(true);
+    }, 300000); // 300,000 ms = 5 min
+
+    return () => clearInterval(interval);
   }, [clientId, sessionKey]);
 
   const handleRequestSubmit = async (e: React.FormEvent) => {
@@ -199,7 +210,7 @@ function Portfolio() {
           </div>
           <div className="space-y-4">
             <button 
-              onClick={() => navigate('/')}
+              onClick={() => window.location.href = '/'}
               className="w-full py-4 border border-gold text-gold font-sans font-bold uppercase tracking-widest text-xs hover:bg-gold hover:text-bg-deep transition-all"
             >
               Regresar al Portal
@@ -266,7 +277,7 @@ function Portfolio() {
             animate={{ opacity: 1, y: 0 }}
             className="main-balance-value font-serif text-5xl sm:text-7xl text-text-main mb-12 sm:mb-16 tracking-tight leading-none"
           >
-            ${totalBalanceUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })} <span className="text-2xl sm:text-3xl text-gold">USDT</span>
+            {totalBalanceUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })} <span className="text-2xl sm:text-3xl text-gold">USDT</span>
           </motion.div>
 
           <div className="asset-grid grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -311,11 +322,11 @@ function Portfolio() {
             <div className="space-y-4">
               <div className="market-row flex justify-between py-4 border-b border-white/5 text-sm">
                 <span className="text-text-dim">Deuda Pendiente</span>
-                <span className="font-serif text-red-400 opacity-90">${data.deuda.toLocaleString()} USDT</span>
+                <span className="font-serif text-red-400 opacity-90">{data.deuda.toLocaleString()} USDT</span>
               </div>
               <div className="market-row flex justify-between py-4 border-b border-white/5 text-sm">
                 <span className="text-text-dim">Crédito Disponible</span>
-                <span className="font-serif text-green-400 opacity-90">${data.prestamoDisponible.toLocaleString()} USDT</span>
+                <span className="font-serif text-green-400 opacity-90">{data.prestamoDisponible.toLocaleString()} USDT</span>
               </div>
               <div className="market-row flex justify-between py-4 text-sm font-bold pt-6">
                 <span className="text-gold uppercase tracking-tighter text-[10px]">Ratio Cobertura</span>
