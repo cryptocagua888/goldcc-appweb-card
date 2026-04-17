@@ -2,7 +2,6 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
-import { google } from "googleapis";
 import dotenv from "dotenv";
 import cors from "cors";
 
@@ -126,12 +125,6 @@ async function startServer() {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
-
-  return app;
 }
 
-const appPromise = startServer();
-export default async (req: any, res: any) => {
-  const app = await appPromise;
-  return app(req, res);
-};
+startServer();
