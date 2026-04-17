@@ -1,0 +1,6 @@
+{
+  "name": "Criptocagua Gold - Portal de Clientes",
+  "description": "Plataforma para que los clientes de Criptocagua Gold visualicen sus activos (BTC, $-L, GLDCC) desde Google Sheets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}
