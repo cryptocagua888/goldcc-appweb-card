@@ -68,6 +68,8 @@ function Portfolio() {
   // Estados de Formulario
   const [amount, setAmount] = useState("");
   const [details, setDetails] = useState("");
+  const [beneficiaryName, setBeneficiaryName] = useState("");
+  const [beneficiaryInfo, setBeneficiaryInfo] = useState("");
   const [newKey, setNewKey] = useState("");
   const [assetType, setAssetType] = useState("$-L");
 
@@ -131,12 +133,14 @@ function Portfolio() {
       } else {
         const payload = {
           cliente: clientId,
-          key: key, // Incluimos la llave para validación en GAS
+          key: key, 
           tipo: requestType,
           monto: amount,
-          detalles: details,
+          detalles: requestType === "third-party" 
+            ? `Beneficiario: ${beneficiaryName} | Datos: ${beneficiaryInfo} | Nota: ${details}` 
+            : details,
           balance_estimado: (data?.btcUsd ?? 0) + (data?.latamUsd ?? 0) + (data?.goldUsd ?? 0),
-          activo: requestType === "withdrawal" ? assetType : "USD"
+          activo: requestType === "withdrawal" ? assetType : "USDT"
         };
         const res = await fetch("/api/request", {
           method: "POST",
@@ -249,7 +253,7 @@ function Portfolio() {
             animate={{ opacity: 1, y: 0 }}
             className="main-balance-value font-serif text-5xl sm:text-7xl text-text-main mb-12 sm:mb-16 tracking-tight leading-none"
           >
-            ${totalBalanceUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })} <span className="text-2xl sm:text-3xl text-gold">USD</span>
+            ${totalBalanceUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })} <span className="text-2xl sm:text-3xl text-gold">USDT</span>
           </motion.div>
 
           <div className="asset-grid grid grid-cols-1 sm:grid-cols-3 gap-6">
@@ -294,11 +298,11 @@ function Portfolio() {
             <div className="space-y-4">
               <div className="market-row flex justify-between py-4 border-b border-white/5 text-sm">
                 <span className="text-text-dim">Deuda Pendiente</span>
-                <span className="font-serif text-red-400 opacity-90">${data.deuda.toLocaleString()} USD</span>
+                <span className="font-serif text-red-400 opacity-90">${data.deuda.toLocaleString()} USDT</span>
               </div>
               <div className="market-row flex justify-between py-4 border-b border-white/5 text-sm">
-                <span className="text-text-dim">Línea de Crédito</span>
-                <span className="font-serif text-green-400 opacity-90">${data.prestamoDisponible.toLocaleString()} USD</span>
+                <span className="text-text-dim">Crédito Disponible</span>
+                <span className="font-serif text-green-400 opacity-90">${data.prestamoDisponible.toLocaleString()} USDT</span>
               </div>
               <div className="market-row flex justify-between py-4 text-sm font-bold pt-6">
                 <span className="text-gold uppercase tracking-tighter text-[10px]">Ratio Cobertura</span>
@@ -437,12 +441,17 @@ function Portfolio() {
                       >
                         ← Volver
                       </button>
-                      <h2 className="text-3xl font-serif italic text-gold">
-                        {requestType === "loan" && "Solicitud de Préstamo"}
-                        {requestType === "third-party" && "Pago a Terceros"}
-                        {requestType === "withdrawal" && "Retiro de Activos"}
-                        {requestType === "key" && "Firma de Seguridad"}
-                      </h2>
+                      <div className="space-y-3">
+                        <p className="text-[10px] text-gold uppercase tracking-[2px] font-bold italic">
+                          {(requestType === "loan" || requestType === "third-party") && "⚠️ ESTA OPERACIÓN SE DESCONTARÁ DE SU CRÉDITO DISPONIBLE"}
+                        </p>
+                        <h2 className="text-3xl font-serif italic text-gold">
+                          {requestType === "loan" && "Solicitud de Préstamo"}
+                          {requestType === "third-party" && "Pago a Terceros"}
+                          {requestType === "withdrawal" && "Retiro de Activos"}
+                          {requestType === "key" && "Firma de Seguridad"}
+                        </h2>
+                      </div>
                     </div>
 
                     <form onSubmit={handleRequestSubmit} className="space-y-8">
@@ -467,7 +476,7 @@ function Portfolio() {
                         <div className="space-y-8">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                             <div className="space-y-3">
-                              <label className="text-[10px] uppercase font-bold tracking-[3px] text-text-dim block px-1">Monto en USD</label>
+                              <label className="text-[10px] uppercase font-bold tracking-[3px] text-text-dim block px-1">Monto en USDT</label>
                               <input 
                                 type="number"
                                 step="any"
@@ -495,16 +504,42 @@ function Portfolio() {
                             )}
                           </div>
 
+                          {requestType === "third-party" && (
+                            <div className="space-y-6 bg-white/5 p-6 border-l-2 border-gold mb-8">
+                              <div className="space-y-3">
+                                <label className="text-[10px] uppercase font-bold tracking-[3px] text-gold block px-1">Nombre del Beneficiario</label>
+                                <input 
+                                  type="text"
+                                  value={beneficiaryName}
+                                  onChange={(e) => setBeneficiaryName(e.target.value)}
+                                  placeholder="Nombre completo o Empresa"
+                                  className="w-full bg-bg-deep border border-border-accent p-4 text-text-main focus:border-gold outline-none text-sm"
+                                  required
+                                />
+                              </div>
+                              <div className="space-y-3">
+                                <label className="text-[10px] uppercase font-bold tracking-[3px] text-gold block px-1">Datos de Cuenta / Red / Banco</label>
+                                <input 
+                                  type="text"
+                                  value={beneficiaryInfo}
+                                  onChange={(e) => setBeneficiaryInfo(e.target.value)}
+                                  placeholder="CBU, Alias, Wallet Address o Red (ej: TRC20)"
+                                  className="w-full bg-bg-deep border border-border-accent p-4 text-text-main focus:border-gold outline-none text-sm"
+                                  required
+                                />
+                              </div>
+                            </div>
+                          )}
+
                           <div className="space-y-3">
                             <label className="text-[10px] uppercase font-bold tracking-[3px] text-text-dim block px-1">
-                              {requestType === "third-party" ? "Credenciales del Beneficiario" : "Memorándum / Notas"}
+                              {requestType === "third-party" ? "Instrucciones Adicionales" : "Memorándum / Notas"}
                             </label>
                             <textarea 
                               value={details}
                               onChange={(e) => setDetails(e.target.value)}
-                              placeholder={requestType === "third-party" ? "Nombre completo, Banco, Documento de Identidad..." : "Detalles adicionales para el gestor..."}
-                              className="w-full bg-bg-deep border border-border-accent p-6 text-text-main focus:border-gold outline-none text-sm min-h-[140px] placeholder:opacity-20 transition-all font-serif italic"
-                              required={requestType === "third-party" || requestType === "withdrawal"}
+                              placeholder={requestType === "third-party" ? "Detalles específicos del pago..." : "Notas para el gestor..."}
+                              className="w-full bg-bg-deep border border-border-accent p-6 text-text-main focus:border-gold outline-none text-sm min-h-[100px] placeholder:opacity-20 transition-all font-serif italic"
                             />
                           </div>
                         </div>
