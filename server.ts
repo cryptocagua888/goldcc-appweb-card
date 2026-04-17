@@ -35,42 +35,64 @@ async function startServer() {
     const key = req.query.key;
     const gasUrl = process.env.GAS_WEBAPP_URL;
 
-    if (!gasUrl || gasUrl === "YOUR_APPS_SCRIPT_WEB_APP_URL") {
+    console.log(`[Proxy] Solicitud de datos para: ${clientId}`);
+
+    if (!gasUrl || gasUrl.includes("YOUR_APPS_SCRIPT")) {
+      console.error("[Proxy] Error: GAS_WEBAPP_URL no configurado correctamente.");
       return res.status(500).json({ 
-        error: "Servidor no configurado. Falta GAS_WEBAPP_URL." 
+        error: "Servidor no configurado. Falta la URL de Google Apps Script en los secretos." 
       });
     }
 
     try {
-      // Validar y construir la URL correctamente manejando parámetros previos
-      const separator = gasUrl.includes("?") ? "&" : "?";
-      const targetUrl = `${gasUrl}${separator}action=getCliente&cliente=${encodeURIComponent(clientId)}&key=${encodeURIComponent(key as string)}`;
+      // Limpiar la URL de posibles espacios accidentales
+      const cleanGasUrl = gasUrl.trim();
+      const separator = cleanGasUrl.includes("?") ? "&" : "?";
+      const targetUrl = `${cleanGasUrl}${separator}action=getCliente&cliente=${encodeURIComponent(clientId)}&key=${encodeURIComponent(key as string)}`;
       
-      console.log("Intentando conectar con GAS:", targetUrl);
+      console.log(`[Proxy] Llamando a GAS: ${targetUrl}`);
       
-      const response = await fetch(targetUrl);
+      const response = await fetch(targetUrl, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          'User-Agent': 'Criptocagua-Gold-App/1.0'
+        }
+      });
+
+      console.log(`[Proxy] Respuesta de Google received. Status: ${response.status}`);
+
       const contentType = response.headers.get("content-type");
 
-      // Si Google responde con algo que no es JSON (como un error de script en HTML)
       if (!contentType || !contentType.includes("application/json")) {
         const textError = await response.text();
-        console.error("Error de Google (No-JSON):", textError.substring(0, 200));
+        console.error(`[Proxy] Error de Google (No-JSON): ${textError.substring(0, 500)}`);
+        
+        // Si es un error de redirección o login, informar al usuario
+        if (textError.includes("Google Accounts") || textError.includes("login") || textError.includes("Service Login")) {
+          return res.status(502).json({ 
+            error: "Error de Permisos: Google Apps Script requiere iniciar sesión. Asegúrate de que la implementación esté configurada para 'Anyone' (Cualquiera)." 
+          });
+        }
+
         return res.status(502).json({ 
-          error: `Google respondió con un error técnico. Detalles: ${textError.substring(0, 100)}...` 
+          error: `Google respondió con un error técnico. Revisa que el script esté bien instalado. (${textError.substring(0, 100)})` 
         });
       }
 
       const data = await response.json();
+      console.log("[Proxy] JSON decodificado exitosamente.");
 
       if (response.status !== 200 || data.error) {
+        console.warn(`[Proxy] Google devolvió un error lógico: ${data.error}`);
         return res.status(response.status).json({ error: data.error || "Error en el servidor de Google Sheets" });
       }
 
       res.json(data);
     } catch (error: any) {
-      console.error("Error crítico de conexión:", error.message);
+      console.error("[Proxy] ERROR CRÍTICO:", error);
       res.status(500).json({ 
-        error: "No se pudo establecer conexión con Google. Revisa que la URL en los secretos sea la correcta." 
+        error: `Fallo de conexión total: ${error.message}. Verifica que la URL sea correcta y no tenga espacios.` 
       });
     }
   });
