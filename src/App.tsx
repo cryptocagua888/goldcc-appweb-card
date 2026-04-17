@@ -72,11 +72,16 @@ function Portfolio() {
   const [assetType, setAssetType] = useState("$-L");
 
   useEffect(() => {
+    console.log("[Portfolio] Iniciando carga de datos...");
     async function fetchData() {
-      if (!clientId) return;
+      if (!clientId) {
+        console.warn("[Portfolio] clientId no detectado");
+        return;
+      }
       try {
         setLoading(true);
         const url = `/api/client/${clientId}${key ? `?key=${key}` : ""}`;
+        console.log(`[Portfolio] Llamando a: ${url}`);
         const response = await fetch(url);
         
         let errorMessage = "Error al cargar datos";
@@ -90,13 +95,16 @@ function Portfolio() {
             const rawText = await response.text();
             errorMessage = `Error (${response.status}): ${rawText.substring(0, 50)}...`;
           }
+          console.error(`[Portfolio] Error HTTP ${response.status}: ${errorMessage}`);
           throw new Error(errorMessage);
         }
 
         const json = await response.json();
+        console.log("[Portfolio] Éxito. Datos:", json);
         setData(json);
         setError(null);
       } catch (err: any) {
+        console.error("[Portfolio] Capturado:", err.message);
         setError(err.message);
       } finally {
         setLoading(false);
@@ -152,10 +160,10 @@ function Portfolio() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-bg-deep" id="loader">
+      <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]" style={{backgroundColor: '#0a0a0a'}}>
         <div className="text-center space-y-4">
-          <Loader2 className="w-10 h-10 text-gold animate-spin mx-auto" />
-          <p className="text-text-dim font-serif italic text-sm tracking-widest">Sincronizando con Google Sheets...</p>
+          <Loader2 className="w-10 h-10 text-[#c5a059] animate-spin mx-auto" />
+          <p className="text-[#888888] font-serif italic text-sm tracking-widest">Sincronizando con Google Sheets...</p>
         </div>
       </div>
     );
@@ -205,7 +213,7 @@ function Portfolio() {
           CRIPTOCAGUA GOLD
         </div>
         <div className="client-id text-[10px] text-text-dim tracking-[2px] uppercase font-bold hidden sm:block">
-          CLIENT ID: #CCG-{clientId?.split('@')[0].toUpperCase()}
+          CLIENT ID: #CCG-{clientId?.split('@')[0]?.toUpperCase() || "ID"}
         </div>
         <div className="flex items-center gap-4">
           <button 
@@ -231,7 +239,7 @@ function Portfolio() {
             animate={{ opacity: 1, x: 0 }}
             className="welcome-msg font-serif italic text-xl lg:text-2xl text-gold mb-3"
           >
-            Bienvenido, <span className="capitalize">{data.cliente.split('@')[0]}</span>
+            Bienvenido, <span className="capitalize">{data?.cliente?.split('@')[0] || "Usuario"}</span>
           </motion.div>
           <div className="main-balance-label text-[11px] uppercase tracking-[3px] text-text-dim mb-4 font-bold">
             Valor de Portafolio Estimado
@@ -540,7 +548,7 @@ function Home() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-bg-deep font-sans" id="home-screen">
+    <div className="min-h-screen flex flex-col bg-[#0a0a0a] font-sans" style={{backgroundColor: '#0a0a0a'}} id="home-screen">
       <header className="px-10 lg:px-20 py-10 flex justify-between items-center border-bottom border-border-accent border-b relative z-10">
         <div className="logo font-serif italic text-2xl text-gold uppercase tracking-[1px]">
           CRIPTOCAGUA GOLD

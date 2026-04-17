@@ -85,7 +85,7 @@ async function startServer() {
 
       if (response.status !== 200 || data.error) {
         console.warn(`[Proxy] Google devolvió un error lógico: ${data.error}`);
-        return res.status(response.status).json({ error: data.error || "Error en el servidor de Google Sheets" });
+        return res.status(400).json({ error: data.error || "Error en el servidor de Google Sheets" });
       }
 
       res.json(data);
