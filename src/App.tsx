@@ -505,28 +505,39 @@ function Portfolio() {
                           </div>
 
                           {requestType === "third-party" && (
-                            <div className="space-y-6 bg-white/5 p-6 border-l-2 border-gold mb-8">
-                              <div className="space-y-3">
-                                <label className="text-[10px] uppercase font-bold tracking-[3px] text-gold block px-1">Nombre del Beneficiario</label>
-                                <input 
-                                  type="text"
-                                  value={beneficiaryName}
-                                  onChange={(e) => setBeneficiaryName(e.target.value)}
-                                  placeholder="Nombre completo o Empresa"
-                                  className="w-full bg-bg-deep border border-border-accent p-4 text-text-main focus:border-gold outline-none text-sm"
-                                  required
-                                />
+                            <div className="space-y-6">
+                              <div className="bg-gold/5 border-l-4 border-gold p-6 space-y-4">
+                                <h4 className="text-[10px] uppercase font-bold tracking-[2px] text-gold">Guía de Información Requerida</h4>
+                                <ul className="text-[10px] text-text-dim space-y-2 list-disc pl-4 italic leading-relaxed">
+                                  <li><strong className="text-text-main">Transferencia Bancaria:</strong> Nombre completo, Banco, Tipo de Cuenta, CBU/Cuentas/IBAN y Documento de identidad.</li>
+                                  <li><strong className="text-text-main">Criptoactivos:</strong> Dirección de billetera (Wallet) y <span className="text-gold underline">especificar Red (ej: TRC20, ERC20, BEP20)</span>.</li>
+                                  <li><strong className="text-text-main">Pagos por ID:</strong> Binance Pay ID o similares.</li>
+                                </ul>
+                                <p className="text-[9px] text-text-dim font-sans">** Verifique los datos. Transferencias a redes incorrectas resultarán en pérdida total de fondos.</p>
                               </div>
-                              <div className="space-y-3">
-                                <label className="text-[10px] uppercase font-bold tracking-[3px] text-gold block px-1">Datos de Cuenta / Red / Banco</label>
-                                <input 
-                                  type="text"
-                                  value={beneficiaryInfo}
-                                  onChange={(e) => setBeneficiaryInfo(e.target.value)}
-                                  placeholder="CBU, Alias, Wallet Address o Red (ej: TRC20)"
-                                  className="w-full bg-bg-deep border border-border-accent p-4 text-text-main focus:border-gold outline-none text-sm"
-                                  required
-                                />
+
+                              <div className="bg-white/5 p-6 border border-white/5 space-y-6">
+                                <div className="space-y-3">
+                                  <label className="text-[10px] uppercase font-bold tracking-[3px] text-gold block px-1">Nombre del Beneficiario</label>
+                                  <input 
+                                    type="text"
+                                    value={beneficiaryName}
+                                    onChange={(e) => setBeneficiaryName(e.target.value)}
+                                    placeholder="Nombre completo o Razón Social"
+                                    className="w-full bg-bg-deep border border-border-accent p-4 text-text-main focus:border-gold outline-none text-sm"
+                                    required
+                                  />
+                                </div>
+                                <div className="space-y-3">
+                                  <label className="text-[10px] uppercase font-bold tracking-[3px] text-gold block px-1">Datos de Cuenta / Red / Billetera</label>
+                                  <textarea 
+                                    value={beneficiaryInfo}
+                                    onChange={(e) => setBeneficiaryInfo(e.target.value)}
+                                    placeholder="Ej: Banco BBVA, Cta Corriente 12345... o Wallet 0x... (Red TRC20)"
+                                    className="w-full bg-bg-deep border border-border-accent p-4 text-text-main focus:border-gold outline-none text-sm min-h-[100px]"
+                                    required
+                                  />
+                                </div>
                               </div>
                             </div>
                           )}
