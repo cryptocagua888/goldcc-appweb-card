@@ -35,7 +35,8 @@ import {
 } from "lucide-react";
 import AssetCard from "./components/AssetCard";
 
-const WHATSAPP_NUMBER = import.meta.env.VITE_WHATSAPP_NUMBER || "584120000000";
+// @ts-ignore
+const WHATSAPP_NUMBER = (import.meta as any).env?.VITE_WHATSAPP_NUMBER || "584120000000";
 
 interface ClientData {
   cliente: string;
