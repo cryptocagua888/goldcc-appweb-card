@@ -75,6 +75,8 @@ function Portfolio() {
   const [beneficiaryName, setBeneficiaryName] = useState("");
   const [beneficiaryInfo, setBeneficiaryInfo] = useState("");
   const [newKey, setNewKey] = useState("");
+  const [oldKeyConfirm, setOldKeyConfirm] = useState("");
+  const [receiveAddress, setReceiveAddress] = useState("");
   const [assetType, setAssetType] = useState("$-L");
   const [withdrawalAmounts, setWithdrawalAmounts] = useState<{ [key: string]: string }>({
     "BTC": "",
@@ -153,6 +155,9 @@ function Portfolio() {
 
     try {
       if (requestType === "key") {
+        if (oldKeyConfirm !== sessionKey) {
+          throw new Error("La llave maestro actual es incorrecta.");
+        }
         const res = await fetch("/api/update-key", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -163,6 +168,7 @@ function Portfolio() {
         
         // Limpiar campos
         setNewKey("");
+        setOldKeyConfirm("");
         setRequestStatus("success");
       } else {
         // Validación de montos para retiros de activos
@@ -190,7 +196,9 @@ function Portfolio() {
           withdrawalDetails: requestType === "withdrawal" ? withdrawalAmounts : null,
           detalles: requestType === "third-party" 
             ? `Beneficiario: ${beneficiaryName} | Datos: ${beneficiaryInfo} | Nota: ${details}` 
-            : details,
+            : requestType === "loan"
+              ? `Recibir en: ${receiveAddress} | Nota: ${details}`
+              : details,
           balance_estimado: (data?.btcUsd ?? 0) + (data?.latamUsd ?? 0) + (data?.goldUsd ?? 0),
           activo: requestType === "withdrawal" ? assetType : "USDT"
         };
@@ -206,6 +214,7 @@ function Portfolio() {
         setAmount("");
         setWithdrawalAmounts({ "BTC": "", "$-L": "", "GLDCC": "" });
         setDetails("");
+        setReceiveAddress("");
         setBeneficiaryName("");
         setBeneficiaryInfo("");
         
@@ -557,16 +566,29 @@ function Portfolio() {
                            <div className="p-6 bg-gold/5 border border-gold/10 text-[10px] text-gold uppercase tracking-[1px] leading-relaxed italic">
                             Advertencia: Al cambiar su llave maestro, todas las sesiones activas en otros dispositivos serán finalizadas por seguridad.
                           </div>
-                          <div className="space-y-3">
-                            <label className="text-[10px] uppercase font-bold tracking-[3px] text-text-dim block px-1">Nueva Llave Maestro</label>
-                            <input 
-                              type="password"
-                              value={newKey}
-                              onChange={(e) => setNewKey(e.target.value)}
-                              placeholder="Firma electrónica segura"
-                              className="w-full bg-bg-deep border border-border-accent p-6 text-text-main focus:border-gold outline-none text-sm placeholder:opacity-20 transition-all font-mono"
-                              required
-                            />
+                          <div className="space-y-6">
+                            <div className="space-y-3">
+                              <label className="text-[10px] uppercase font-bold tracking-[3px] text-text-dim block px-1">Llave Maestro Actual</label>
+                              <input 
+                                type="password"
+                                value={oldKeyConfirm}
+                                onChange={(e) => setOldKeyConfirm(e.target.value)}
+                                placeholder="Confirme su llave actual"
+                                className="w-full bg-bg-deep border border-border-accent p-6 text-text-main focus:border-gold outline-none text-sm placeholder:opacity-20 transition-all font-mono"
+                                required
+                              />
+                            </div>
+                            <div className="space-y-3">
+                              <label className="text-[10px] uppercase font-bold tracking-[3px] text-text-dim block px-1">Nueva Llave Maestro</label>
+                              <input 
+                                type="password"
+                                value={newKey}
+                                onChange={(e) => setNewKey(e.target.value)}
+                                placeholder="Nueva firma electrónica segura"
+                                className="w-full bg-bg-deep border border-border-accent p-6 text-text-main focus:border-gold outline-none text-sm placeholder:opacity-20 transition-all font-mono"
+                                required
+                              />
+                            </div>
                           </div>
                         </div>
                       ) : requestType === "withdrawal" ? (
@@ -637,7 +659,9 @@ function Portfolio() {
                         <div className="space-y-8">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
                             <div className="space-y-3">
-                              <label className="text-[10px] uppercase font-bold tracking-[3px] text-text-dim block px-1">Monto en USDT</label>
+                              <label className="text-[10px] uppercase font-bold tracking-[3px] text-text-dim block px-1">
+                                {requestType === "third-party" ? `Monto a Pagar (Disp: ${data.prestamoDisponible.toLocaleString()} USDT)` : `Monto del Préstamo (Limite: ${data.prestamoDisponible.toLocaleString()} USDT)`}
+                              </label>
                               <input 
                                 type="number"
                                 step="any"
@@ -648,6 +672,20 @@ function Portfolio() {
                                 required
                               />
                             </div>
+
+                            {requestType === "loan" && (
+                              <div className="space-y-3">
+                                <label className="text-[10px] uppercase font-bold tracking-[3px] text-text-dim block px-1">Dirección de Recepción</label>
+                                <input 
+                                  type="text"
+                                  value={receiveAddress}
+                                  onChange={(e) => setReceiveAddress(e.target.value)}
+                                  placeholder="Su wallet o cuenta para recibir"
+                                  className="w-full bg-bg-deep border border-border-accent p-6 text-text-main focus:border-gold outline-none text-sm placeholder:opacity-20 transition-all"
+                                  required
+                                />
+                              </div>
+                            )}
                           </div>
 
                           {requestType === "third-party" && (
