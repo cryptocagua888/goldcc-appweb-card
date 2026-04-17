@@ -77,10 +77,20 @@ function Portfolio() {
         setLoading(true);
         const url = `/api/client/${clientId}${key ? `?key=${key}` : ""}`;
         const response = await fetch(url);
+        
+        let errorMessage = "Error al cargar datos";
+        
         if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || "Error al cargar datos");
+          const contentType = response.headers.get("content-type");
+          if (contentType && contentType.includes("application/json")) {
+            const errData = await response.json();
+            errorMessage = errData.error || errorMessage;
+          } else {
+            errorMessage = `Error del servidor (${response.status}): Revisa la configuración de GAS_WEBAPP_URL.`;
+          }
+          throw new Error(errorMessage);
         }
+
         const json = await response.json();
         setData(json);
         setError(null);
