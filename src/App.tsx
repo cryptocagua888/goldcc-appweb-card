@@ -86,7 +86,8 @@ function Portfolio() {
             const errData = await response.json();
             errorMessage = errData.error || errorMessage;
           } else {
-            errorMessage = `Error del servidor (${response.status}): Revisa la configuración de GAS_WEBAPP_URL.`;
+            const rawText = await response.text();
+            errorMessage = `Error (${response.status}): ${rawText.substring(0, 50)}...`;
           }
           throw new Error(errorMessage);
         }

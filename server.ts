@@ -31,17 +31,21 @@ async function startServer() {
     }
 
     try {
-      const targetUrl = `${gasUrl}?action=getCliente&cliente=${encodeURIComponent(clientId)}&key=${encodeURIComponent(key as string)}`;
+      // Validar y construir la URL correctamente manejando parámetros previos
+      const separator = gasUrl.includes("?") ? "&" : "?";
+      const targetUrl = `${gasUrl}${separator}action=getCliente&cliente=${encodeURIComponent(clientId)}&key=${encodeURIComponent(key as string)}`;
+      
+      console.log("Intentando conectar con GAS:", targetUrl);
       
       const response = await fetch(targetUrl);
       const contentType = response.headers.get("content-type");
 
-      // Si no es JSON, capturar el texto para saber qué error da Google
+      // Si Google responde con algo que no es JSON (como un error de script en HTML)
       if (!contentType || !contentType.includes("application/json")) {
         const textError = await response.text();
-        console.error("Respuesta no-JSON de GAS:", textError);
-        return res.status(500).json({ 
-          error: "Google Apps Script no devolvió un JSON válido. Revisa los permisos (Anyone) y la URL." 
+        console.error("Error de Google (No-JSON):", textError.substring(0, 200));
+        return res.status(502).json({ 
+          error: `Google respondió con un error técnico. Detalles: ${textError.substring(0, 100)}...` 
         });
       }
 
@@ -53,8 +57,10 @@ async function startServer() {
 
       res.json(data);
     } catch (error: any) {
-      console.error("Error fetching from GAS:", error);
-      res.status(500).json({ error: "Error al conectar con Google Apps Script: " + error.message });
+      console.error("Error crítico de conexión:", error.message);
+      res.status(500).json({ 
+        error: "No se pudo establecer conexión con Google. Revisa que la URL en los secretos sea la correcta." 
+      });
     }
   });
 
