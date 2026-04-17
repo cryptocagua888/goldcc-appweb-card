@@ -31,7 +31,8 @@ import {
   RefreshCw,
   PlusCircle,
   MessageSquare,
-  X
+  X,
+  LogOut
 } from "lucide-react";
 import AssetCard from "./components/AssetCard";
 
@@ -53,6 +54,7 @@ interface ClientData {
 function Portfolio() {
   const { clientId } = useParams<{ clientId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [sessionKey, setSessionKey] = useState<string | null>(() => {
     // Intentar recuperar de sessionStorage si existe
     return searchParams.get("key") || sessionStorage.getItem(`ccg_key_${clientId}`);
@@ -74,6 +76,11 @@ function Portfolio() {
   const [beneficiaryInfo, setBeneficiaryInfo] = useState("");
   const [newKey, setNewKey] = useState("");
   const [assetType, setAssetType] = useState("$-L");
+  const [withdrawalAmounts, setWithdrawalAmounts] = useState<{ [key: string]: string }>({
+    "BTC": "",
+    "$-L": "",
+    "GLDCC": ""
+  });
 
   // Limpiar URL al cargar
   useEffect(() => {
@@ -153,13 +160,34 @@ function Portfolio() {
         });
         const result = await res.json();
         if (result.error) throw new Error(result.error);
+        
+        // Limpiar campos
+        setNewKey("");
         setRequestStatus("success");
       } else {
+        // Validación de montos para retiros de activos
+        if (requestType === "withdrawal") {
+          const btcToWithdraw = parseFloat(withdrawalAmounts["BTC"] || "0");
+          const latamToWithdraw = parseFloat(withdrawalAmounts["$-L"] || "0");
+          const goldToWithdraw = parseFloat(withdrawalAmounts["GLDCC"] || "0");
+
+          if (btcToWithdraw > (data?.btc || 0)) throw new Error("Monto de BTC excede su balance disponible.");
+          if (latamToWithdraw > (data?.latam || 0)) throw new Error("Monto de Dolar Latam excede su balance disponible.");
+          if (goldToWithdraw > (data?.gold || 0)) throw new Error("Monto de Cagua Gold excede su balance disponible.");
+          if (btcToWithdraw <= 0 && latamToWithdraw <= 0 && goldToWithdraw <= 0) {
+            throw new Error("Debe ingresar al menos un monto válido para retirar.");
+          }
+        } else if (requestType === "loan" || requestType === "third-party") {
+          const val = parseFloat(amount || "0");
+          if (val > (data?.prestamoDisponible || 0)) throw new Error("El monto excede su crédito disponible.");
+        }
+
         const payload = {
           cliente: clientId,
           key: sessionKey, 
           tipo: requestType,
-          monto: amount,
+          monto: requestType === "withdrawal" ? "" : amount,
+          withdrawalDetails: requestType === "withdrawal" ? withdrawalAmounts : null,
           detalles: requestType === "third-party" 
             ? `Beneficiario: ${beneficiaryName} | Datos: ${beneficiaryInfo} | Nota: ${details}` 
             : details,
@@ -173,6 +201,14 @@ function Portfolio() {
         });
         const result = await res.json();
         if (result.error) throw new Error(result.error);
+        
+        // Limpiar campos tras éxito
+        setAmount("");
+        setWithdrawalAmounts({ "BTC": "", "$-L": "", "GLDCC": "" });
+        setDetails("");
+        setBeneficiaryName("");
+        setBeneficiaryInfo("");
+        
         setRequestStatus("success");
       }
     } catch (err: any) {
@@ -185,6 +221,36 @@ function Portfolio() {
     const message = encodeURIComponent(`Hola, soy cliente de Criptocagua Gold (${clientId}) y necesito ayuda.`);
     window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${message}`, "_blank");
   };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem(`ccg_key_${clientId}`);
+    window.location.href = '/';
+  };
+
+  // Temporizador de Inactividad (10 minutos)
+  useEffect(() => {
+    let timeout: NodeJS.Timeout;
+
+    const resetTimer = () => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        console.log("[Security] Sesión expirada por inactividad.");
+        handleLogout();
+      }, 600000); // 600,000 ms = 10 min
+    };
+
+    // Eventos que reinician el contador
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    events.forEach(event => document.addEventListener(event, resetTimer));
+
+    // Iniciar timer
+    resetTimer();
+
+    return () => {
+      clearTimeout(timeout);
+      events.forEach(event => document.removeEventListener(event, resetTimer));
+    };
+  }, [clientId]);
 
   if (loading) {
     return (
@@ -256,6 +322,13 @@ function Portfolio() {
             className="bg-gold px-6 py-2.5 text-bg-deep font-sans font-bold uppercase tracking-[2px] text-[10px] hover:bg-gold-dim transition-all"
           >
             Área de Solicitudes
+          </button>
+          <button 
+            onClick={handleLogout}
+            className="p-2 text-text-dim hover:text-red-400 transition-colors border border-border-accent hover:border-red-400/30 ml-2"
+            title="Cerrar Sessión"
+          >
+            <LogOut className="w-5 h-5" />
           </button>
         </div>
       </header>
@@ -372,70 +445,70 @@ function Portfolio() {
       {/* Requests Modal */}
       <AnimatePresence>
         {showRequestModal && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-bg-deep/95 backdrop-blur-md">
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 bg-bg-deep/95 backdrop-blur-md">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-bg-panel border border-border-accent w-full max-w-2xl relative overflow-hidden shadow-[0_0_50px_rgba(197,160,89,0.1)]"
+              className="bg-bg-panel border border-border-accent w-full max-w-2xl relative max-h-[90vh] overflow-y-auto shadow-[0_0_50px_rgba(197,160,89,0.1)] custom-scrollbar"
             >
               <button 
                 onClick={() => { setShowRequestModal(false); setRequestType(null); setFormError(null); setRequestStatus("idle"); }}
-                className="absolute top-6 right-6 text-text-dim hover:text-gold transition-colors z-[110]"
+                className="fixed sm:absolute top-4 sm:top-6 right-4 sm:right-6 text-text-dim hover:text-gold transition-colors z-[110] bg-bg-panel/80 backdrop-blur-sm p-1 rounded-full"
               >
                 <X className="w-6 h-6" />
               </button>
 
-              <div className="p-10 lg:p-16">
+              <div className="p-6 sm:p-10 lg:p-16">
                 {!requestType ? (
-                  <div className="space-y-10">
+                  <div className="space-y-8 sm:space-y-10">
                     <div className="space-y-3">
-                      <h2 className="text-4xl lg:text-5xl font-serif italic text-gold leading-tight">Centro de <br />Solicitudes</h2>
-                      <p className="text-text-dim text-sm tracking-wide">Seleccione el servicio exclusivo que desea gestionar hoy.</p>
+                      <h2 className="text-3xl sm:text-4xl lg:text-5xl font-serif italic text-gold leading-tight">Centro de <br />Solicitudes</h2>
+                      <p className="text-text-dim text-xs sm:text-sm tracking-wide">Seleccione el servicio exclusivo que desea gestionar hoy.</p>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                       <button 
                         onClick={() => { setRequestType("loan"); setRequestStatus("idle"); }}
-                        className="p-8 border border-border-accent bg-bg-card hover:border-gold/50 transition-all text-left flex flex-col gap-5 group"
+                        className="p-6 sm:p-8 border border-border-accent bg-bg-card hover:border-gold/50 transition-all text-left flex flex-col gap-4 sm:gap-5 group"
                       >
-                        <PlusCircle className="w-10 h-10 text-gold group-hover:scale-110 transition-transform" />
+                        <PlusCircle className="w-8 h-8 sm:w-10 sm:h-10 text-gold group-hover:scale-110 transition-transform" />
                         <div>
-                          <p className="text-xs font-bold uppercase tracking-[3px] text-text-main">Solicitar Préstamo</p>
-                          <p className="text-[10px] text-text-dim mt-2 leading-relaxed italic">Disponibilidad inmediata según su línea de crédito.</p>
+                          <p className="text-[10px] sm:text-xs font-bold uppercase tracking-[3px] text-text-main">Solicitar Préstamo</p>
+                          <p className="text-[9px] sm:text-[10px] text-text-dim mt-2 leading-relaxed italic">Disponibilidad inmediata según su línea de crédito.</p>
                         </div>
                       </button>
 
                       <button 
                         onClick={() => { setRequestType("third-party"); setRequestStatus("idle"); }}
-                        className="p-8 border border-border-accent bg-bg-card hover:border-gold/50 transition-all text-left flex flex-col gap-5 group"
+                        className="p-6 sm:p-8 border border-border-accent bg-bg-card hover:border-gold/50 transition-all text-left flex flex-col gap-4 sm:gap-5 group"
                       >
-                        <UserPlus className="w-10 h-10 text-gold group-hover:scale-110 transition-transform" />
+                        <UserPlus className="w-8 h-8 sm:w-10 sm:h-10 text-gold group-hover:scale-110 transition-transform" />
                         <div>
-                          <p className="text-xs font-bold uppercase tracking-[3px] text-text-main">Pago a Terceros</p>
-                          <p className="text-[10px] text-text-dim mt-2 leading-relaxed italic">Gestione sus compromisos con cargo a su préstamo.</p>
+                          <p className="text-[10px] sm:text-xs font-bold uppercase tracking-[3px] text-text-main">Pago a Terceros</p>
+                          <p className="text-[9px] sm:text-[10px] text-text-dim mt-2 leading-relaxed italic">Gestione sus compromisos con cargo a su préstamo.</p>
                         </div>
                       </button>
 
                       <button 
                         onClick={() => { setRequestType("withdrawal"); setRequestStatus("idle"); }}
-                        className="p-8 border border-border-accent bg-bg-card hover:border-gold/50 transition-all text-left flex flex-col gap-5 group"
+                        className="p-6 sm:p-8 border border-border-accent bg-bg-card hover:border-gold/50 transition-all text-left flex flex-col gap-4 sm:gap-5 group"
                       >
-                        <ArrowUpRight className="w-10 h-10 text-gold group-hover:scale-110 transition-transform" />
+                        <ArrowUpRight className="w-8 h-8 sm:w-10 sm:h-10 text-gold group-hover:scale-110 transition-transform" />
                         <div>
-                          <p className="text-xs font-bold uppercase tracking-[3px] text-text-main">Retiro de Activos</p>
-                          <p className="text-[10px] text-text-dim mt-2 leading-relaxed italic">Transferencia de tokens a su wallet personal.</p>
+                          <p className="text-[10px] sm:text-xs font-bold uppercase tracking-[3px] text-text-main">Retiro de Activos</p>
+                          <p className="text-[9px] sm:text-[10px] text-text-dim mt-2 leading-relaxed italic">Transferencia de tokens a su wallet personal.</p>
                         </div>
                       </button>
 
                       <button 
                         onClick={() => { setRequestType("key"); setRequestStatus("idle"); }}
-                        className="p-8 border border-border-accent bg-bg-card hover:border-gold/50 transition-all text-left flex flex-col gap-5 group"
+                        className="p-6 sm:p-8 border border-border-accent bg-bg-card hover:border-gold/50 transition-all text-left flex flex-col gap-4 sm:gap-5 group"
                       >
-                        <Key className="w-10 h-10 text-gold group-hover:scale-110 transition-transform" />
+                        <Key className="w-8 h-8 sm:w-10 sm:h-10 text-gold group-hover:scale-110 transition-transform" />
                         <div>
-                          <p className="text-xs font-bold uppercase tracking-[3px] text-text-main">Actualizar Llave</p>
-                          <p className="text-[10px] text-text-dim mt-2 leading-relaxed italic">Refuerce la seguridad de su acceso maestro.</p>
+                          <p className="text-[10px] sm:text-xs font-bold uppercase tracking-[3px] text-text-main">Actualizar Llave</p>
+                          <p className="text-[9px] sm:text-[10px] text-text-dim mt-2 leading-relaxed italic">Refuerce la seguridad de su acceso maestro.</p>
                         </div>
                       </button>
                     </div>
@@ -472,7 +545,7 @@ function Portfolio() {
                         <h2 className="text-3xl font-serif italic text-gold">
                           {requestType === "loan" && "Solicitud de Préstamo"}
                           {requestType === "third-party" && "Pago a Terceros"}
-                          {requestType === "withdrawal" && "Retiro de Activos"}
+                          {requestType === "withdrawal" && "Retiro de Activos Múltiple"}
                           {requestType === "key" && "Firma de Seguridad"}
                         </h2>
                       </div>
@@ -496,6 +569,70 @@ function Portfolio() {
                             />
                           </div>
                         </div>
+                      ) : requestType === "withdrawal" ? (
+                        <div className="space-y-8">
+                          <div className="bg-gold/5 border-l-4 border-gold p-4 text-[10px] text-gold uppercase tracking-[1px] italic mb-6">
+                            Indique la cantidad de cada activo que desea retirar a su billetera.
+                          </div>
+                          
+                          <div className="space-y-6">
+                            {/* BTC Row */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end border-b border-white/5 pb-6">
+                              <div className="space-y-2">
+                                <label className="text-[10px] uppercase font-bold tracking-[2px] text-text-dim block">Bitcoin (BTC) | Disponible: {data.btc.toFixed(8)}</label>
+                                <input 
+                                  type="number" step="any"
+                                  value={withdrawalAmounts["BTC"]}
+                                  onChange={(e) => setWithdrawalAmounts({...withdrawalAmounts, "BTC": e.target.value})}
+                                  placeholder="0.00000000"
+                                  className="w-full bg-bg-deep border border-border-accent p-4 text-text-main focus:border-gold outline-none text-sm font-mono"
+                                />
+                              </div>
+                              <div className="hidden sm:block text-[10px] text-text-dim italic pb-4">≈ {(parseFloat(withdrawalAmounts["BTC"] || "0") * (data.btcUsd / (data.btc || 1))).toFixed(2)} USDT</div>
+                            </div>
+
+                            {/* LATAM Row */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end border-b border-white/5 pb-6">
+                              <div className="space-y-2">
+                                <label className="text-[10px] uppercase font-bold tracking-[2px] text-text-dim block">Dolar Latam ($-L) | Disponible: {data.latam.toFixed(2)}</label>
+                                <input 
+                                  type="number" step="any"
+                                  value={withdrawalAmounts["$-L"]}
+                                  onChange={(e) => setWithdrawalAmounts({...withdrawalAmounts, "$-L": e.target.value})}
+                                  placeholder="0.00"
+                                  className="w-full bg-bg-deep border border-border-accent p-4 text-text-main focus:border-gold outline-none text-sm font-mono"
+                                />
+                              </div>
+                              <div className="hidden sm:block text-[10px] text-text-dim italic pb-4">≈ {(parseFloat(withdrawalAmounts["$-L"] || "0") * (data.latamUsd / (data.latam || 1))).toFixed(2)} USDT</div>
+                            </div>
+
+                            {/* GOLD Row */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end border-b border-white/5 pb-6">
+                              <div className="space-y-2">
+                                <label className="text-[10px] uppercase font-bold tracking-[2px] text-text-dim block">Cagua Gold (GLDCC) | Disponible: {data.gold.toFixed(2)}</label>
+                                <input 
+                                  type="number" step="any"
+                                  value={withdrawalAmounts["GLDCC"]}
+                                  onChange={(e) => setWithdrawalAmounts({...withdrawalAmounts, "GLDCC": e.target.value})}
+                                  placeholder="0.00"
+                                  className="w-full bg-bg-deep border border-border-accent p-4 text-text-main focus:border-gold outline-none text-sm font-mono"
+                                />
+                              </div>
+                              <div className="hidden sm:block text-[10px] text-text-dim italic pb-4">≈ {(parseFloat(withdrawalAmounts["GLDCC"] || "0") * (data.goldUsd / (data.gold || 1))).toFixed(2)} USDT</div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-3">
+                            <label className="text-[10px] uppercase font-bold tracking-[3px] text-text-dim block px-1">Memorándum / Instrucciones de Wallet</label>
+                            <textarea 
+                              value={details}
+                              onChange={(e) => setDetails(e.target.value)}
+                              placeholder="Especifique su dirección de billetera y red (ej: TRC20)..."
+                              className="w-full bg-bg-deep border border-border-accent p-6 text-text-main focus:border-gold outline-none text-sm min-h-[100px] font-serif italic"
+                              required
+                            />
+                          </div>
+                        </div>
                       ) : (
                         <div className="space-y-8">
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
@@ -511,21 +648,6 @@ function Portfolio() {
                                 required
                               />
                             </div>
-                            
-                            {requestType === "withdrawal" && (
-                              <div className="space-y-3">
-                                <label className="text-[10px] uppercase font-bold tracking-[3px] text-text-dim block px-1">Instrumento</label>
-                                <select 
-                                  value={assetType}
-                                  onChange={(e) => setAssetType(e.target.value)}
-                                  className="w-full bg-bg-deep border border-border-accent p-6 text-text-main focus:border-gold outline-none text-sm appearance-none transition-all cursor-pointer"
-                                >
-                                  <option value="$-L">Dolar Latam ($-L)</option>
-                                  <option value="BTC">Bitcoin (BTC)</option>
-                                  <option value="GLDCC">Cagua Gold (GLDCC)</option>
-                                </select>
-                              </div>
-                            )}
                           </div>
 
                           {requestType === "third-party" && (

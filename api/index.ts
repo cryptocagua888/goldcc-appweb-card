@@ -82,21 +82,33 @@ async function startServer() {
   // API Request submission
   app.post("/api/request", async (req, res) => {
     const gasUrl = process.env.GAS_WEBAPP_URL;
-    if (!gasUrl) return res.status(500).json({ error: "GAS_WEBAPP_URL not configured" });
+    const adminEmail = process.env.ADMIN_EMAIL;
+
+    if (!gasUrl) return res.status(500).json({ error: "GAS_WEBAPP_URL no configurada." });
+    
+    // Validación básica de email para evitar el error de GAS
+    if (!adminEmail || !adminEmail.includes("@")) {
+      console.error("[Proxy] ADMIN_EMAIL inválido o ausente:", adminEmail);
+      return res.status(500).json({ 
+        error: "Configuración incompleta: El ADMIN_EMAIL en los secretos debe ser un correo válido, no un número." 
+      });
+    }
 
     try {
+      console.log(`[Proxy] Enviando solicitud a GAS para: ${req.body.cliente}`);
       const response = await fetch(gasUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "submitRequest",
-          adminEmail: process.env.ADMIN_EMAIL,
+          adminEmail: adminEmail,
           ...req.body
         })
       });
       const data = await response.json();
       res.json(data);
     } catch (error: any) {
+      console.error("[Proxy] ERROR en Solicitud:", error.message);
       res.status(500).json({ error: error.message });
     }
   });
@@ -104,7 +116,15 @@ async function startServer() {
   // API Update key
   app.post("/api/update-key", async (req, res) => {
     const gasUrl = process.env.GAS_WEBAPP_URL;
-    if (!gasUrl) return res.status(500).json({ error: "GAS_WEBAPP_URL not configured" });
+    const adminEmail = process.env.ADMIN_EMAIL;
+
+    if (!gasUrl) return res.status(500).json({ error: "GAS_WEBAPP_URL no configurada." });
+    
+    if (!adminEmail || !adminEmail.includes("@")) {
+      return res.status(500).json({ 
+        error: "Configuración incompleta: El ADMIN_EMAIL en los secretos debe ser un correo válido." 
+      });
+    }
 
     try {
       const response = await fetch(gasUrl, {
@@ -112,13 +132,14 @@ async function startServer() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "updateKey",
-          adminEmail: process.env.ADMIN_EMAIL,
+          adminEmail: adminEmail,
           ...req.body
         })
       });
       const data = await response.json();
       res.json(data);
     } catch (error: any) {
+      console.error("[Proxy] ERROR en Actualizar Llave:", error.message);
       res.status(500).json({ error: error.message });
     }
   });
