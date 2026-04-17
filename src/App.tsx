@@ -52,9 +52,11 @@ interface ClientData {
 
 function Portfolio() {
   const { clientId } = useParams<{ clientId: string }>();
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const key = searchParams.get("key");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [sessionKey, setSessionKey] = useState<string | null>(() => {
+    // Intentar recuperar de sessionStorage si existe
+    return searchParams.get("key") || sessionStorage.getItem(`ccg_key_${clientId}`);
+  });
   const [data, setData] = useState<ClientData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +75,17 @@ function Portfolio() {
   const [newKey, setNewKey] = useState("");
   const [assetType, setAssetType] = useState("$-L");
 
+  // Limpiar URL al cargar
+  useEffect(() => {
+    const urlKey = searchParams.get("key");
+    if (urlKey && clientId) {
+      sessionStorage.setItem(`ccg_key_${clientId}`, urlKey);
+      setSessionKey(urlKey);
+      // Remover la llave del URL sin recargar la página
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, clientId, setSearchParams]);
+
   useEffect(() => {
     console.log("[Portfolio] Iniciando carga de datos...");
     async function fetchData() {
@@ -82,7 +95,7 @@ function Portfolio() {
       }
       try {
         setLoading(true);
-        const url = `/api/client/${clientId}${key ? `?key=${key}` : ""}`;
+        const url = `/api/client/${clientId}${sessionKey ? `?key=${sessionKey}` : ""}`;
         console.log(`[Portfolio] Llamando a: ${url}`);
         const response = await fetch(url);
         
@@ -113,7 +126,7 @@ function Portfolio() {
       }
     }
     fetchData();
-  }, [clientId, key]);
+  }, [clientId, sessionKey]);
 
   const handleRequestSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -125,7 +138,7 @@ function Portfolio() {
         const res = await fetch("/api/update-key", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ cliente: clientId, oldKey: key, newKey })
+          body: JSON.stringify({ cliente: clientId, oldKey: sessionKey, newKey })
         });
         const result = await res.json();
         if (result.error) throw new Error(result.error);
@@ -133,7 +146,7 @@ function Portfolio() {
       } else {
         const payload = {
           cliente: clientId,
-          key: key, 
+          key: sessionKey, 
           tipo: requestType,
           monto: amount,
           detalles: requestType === "third-party" 
