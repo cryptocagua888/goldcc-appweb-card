@@ -11,11 +11,23 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 async function startServer() {
-  const app = express();
-  const PORT = 3000;
+  try {
+    const app = express();
+    const PORT = 3000;
 
-  app.use(cors());
-  app.use(express.json());
+    app.use(cors());
+    app.use(express.json());
+
+    // Health check endpoint
+    app.get("/api/health", (req, res) => {
+      res.json({ 
+        status: "ok", 
+        env: {
+          hasGasUrl: !!process.env.GAS_WEBAPP_URL,
+          nodeEnv: process.env.NODE_ENV
+        }
+      });
+    });
 
   // API Route to fetch client data via Google Apps Script Proxy
   app.get("/api/client/:id", async (req, res) => {
@@ -125,6 +137,13 @@ async function startServer() {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+  } catch (startupError: any) {
+    console.error("FATAL STARTUP ERROR:", startupError);
+    process.exit(1);
+  }
 }
 
-startServer();
+startServer().catch(err => {
+  console.error("UNHANDLED STARTUP REJECTION:", err);
+  process.exit(1);
+});
