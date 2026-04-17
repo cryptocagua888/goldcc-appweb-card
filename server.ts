@@ -34,6 +34,17 @@ async function startServer() {
       const targetUrl = `${gasUrl}?action=getCliente&cliente=${encodeURIComponent(clientId)}&key=${encodeURIComponent(key as string)}`;
       
       const response = await fetch(targetUrl);
+      const contentType = response.headers.get("content-type");
+
+      // Si no es JSON, capturar el texto para saber qué error da Google
+      if (!contentType || !contentType.includes("application/json")) {
+        const textError = await response.text();
+        console.error("Respuesta no-JSON de GAS:", textError);
+        return res.status(500).json({ 
+          error: "Google Apps Script no devolvió un JSON válido. Revisa los permisos (Anyone) y la URL." 
+        });
+      }
+
       const data = await response.json();
 
       if (response.status !== 200 || data.error) {
