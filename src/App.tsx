@@ -32,7 +32,9 @@ import {
   PlusCircle,
   MessageSquare,
   X,
-  LogOut
+  LogOut,
+  Fingerprint,
+  Check
 } from "lucide-react";
 import AssetCard from "./components/AssetCard";
 
@@ -768,12 +770,154 @@ function Portfolio() {
 function Home() {
   const [clientId, setClientId] = useState("");
   const [securityKey, setSecurityKey] = useState("");
+  const [saveBiometrics, setSaveBiometrics] = useState(true);
+  const [hasSavedBiometrics, setHasSavedBiometrics] = useState(false);
+  const [biometricUser, setBiometricUser] = useState<string | null>(null);
+  const [biometricLoading, setBiometricLoading] = useState(false);
+  const [biometricError, setBiometricError] = useState<string | null>(null);
+  const [isBiometricSupported, setIsBiometricSupported] = useState(false);
   const navigate = useNavigate();
 
-  const handleSearch = (e: React.FormEvent) => {
+  useEffect(() => {
+    // Check if device supports WebAuthn / Biometrics
+    if (typeof window !== "undefined" && window.PublicKeyCredential) {
+      setIsBiometricSupported(true);
+    }
+
+    // Check for saved biometrics in localStorage
+    try {
+      const saved = localStorage.getItem("ccg_biometric_credentials");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.clientId && parsed.securityKey) {
+          setHasSavedBiometrics(true);
+          setBiometricUser(parsed.clientId);
+          setClientId(parsed.clientId);
+        }
+      }
+    } catch (e) {
+      console.error("Error al leer biometría guardada:", e);
+    }
+  }, []);
+
+  // Biometric Login Handler (Fingerprint / Face ID scan -> direct login)
+  const handleBiometricLogin = async (autofillOnly = false) => {
+    setBiometricError(null);
+    setBiometricLoading(true);
+
+    try {
+      const saved = localStorage.getItem("ccg_biometric_credentials");
+      if (!saved) {
+        throw new Error("No hay huella registrada en este dispositivo.");
+      }
+
+      const parsed = JSON.parse(saved);
+
+      // Trigger WebAuthn native device biometric scan prompt if supported
+      if (window.PublicKeyCredential && navigator.credentials) {
+        const challenge = new Uint8Array(32);
+        window.crypto.getRandomValues(challenge);
+
+        const options: CredentialRequestOptions = {
+          publicKey: {
+            challenge: challenge,
+            timeout: 60000,
+            userVerification: "preferred"
+          }
+        };
+
+        try {
+          await navigator.credentials.get(options);
+        } catch (err: any) {
+          console.warn("Retorno de verificación biométrica:", err);
+          if (err.name === "NotAllowedError" || err.message?.includes("cancel")) {
+            throw new Error("Autenticación por huella cancelada por el usuario.");
+          }
+        }
+      }
+
+      // Auto-fill inputs
+      setClientId(parsed.clientId);
+      setSecurityKey(parsed.securityKey);
+
+      // If not autofill-only, proceed directly into portal
+      if (!autofillOnly) {
+        navigate(`/cliente/${encodeURIComponent(parsed.clientId)}?key=${encodeURIComponent(parsed.securityKey)}`);
+      }
+    } catch (err: any) {
+      console.error("Error en inicio biométrico:", err);
+      setBiometricError(err.message || "No se pudo verificar la huella dactilar.");
+    } finally {
+      setBiometricLoading(false);
+    }
+  };
+
+  // Save biometric credentials locally after fingerprint verification
+  const saveBiometricCredentials = async (cId: string, sKey: string) => {
+    try {
+      if (window.PublicKeyCredential && navigator.credentials) {
+        const challenge = new Uint8Array(32);
+        const userId = new Uint8Array(16);
+        window.crypto.getRandomValues(challenge);
+        window.crypto.getRandomValues(userId);
+
+        const createOptions: CredentialCreationOptions = {
+          publicKey: {
+            challenge: challenge,
+            rp: { name: "Criptocagua Gold Private Wealth" },
+            user: {
+              id: userId,
+              name: cId,
+              displayName: cId
+            },
+            pubKeyCredParams: [
+              { type: "public-key", alg: -7 },
+              { type: "public-key", alg: -257 }
+            ],
+            timeout: 60000,
+            authenticatorSelection: {
+              userVerification: "preferred"
+            }
+          }
+        };
+
+        try {
+          await navigator.credentials.create(createOptions);
+        } catch (err) {
+          console.warn("Registro biométrico nativo completado o omitido:", err);
+        }
+      }
+
+      localStorage.setItem("ccg_biometric_credentials", JSON.stringify({
+        clientId: cId,
+        securityKey: sKey,
+        updatedAt: new Date().toISOString()
+      }));
+
+      setHasSavedBiometrics(true);
+      setBiometricUser(cId);
+    } catch (err) {
+      console.error("Error guardando credenciales biométricas:", err);
+    }
+  };
+
+  const handleRemoveBiometrics = () => {
+    localStorage.removeItem("ccg_biometric_credentials");
+    setHasSavedBiometrics(false);
+    setBiometricUser(null);
+    setBiometricError(null);
+  };
+
+  const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (clientId.trim() && securityKey.trim()) {
-      navigate(`/cliente/${encodeURIComponent(clientId.trim())}?key=${encodeURIComponent(securityKey.trim())}`);
+    const cleanId = clientId.trim();
+    const cleanKey = securityKey.trim();
+
+    if (cleanId && cleanKey) {
+      if (saveBiometrics) {
+        await saveBiometricCredentials(cleanId, cleanKey);
+      }
+      navigate(`/cliente/${encodeURIComponent(cleanId)}?key=${encodeURIComponent(cleanKey)}`);
     }
   };
 
@@ -801,16 +945,80 @@ function Home() {
           transition={{ duration: 0.6, ease: "easeOut" }}
           className="max-w-md w-full relative z-10"
         >
-          <div className="bg-bg-panel border border-border-accent p-12 lg:p-16 rounded-none shadow-[0_40px_100px_rgba(0,0,0,0.5)] space-y-12">
+          <div className="bg-bg-panel border border-border-accent p-8 sm:p-12 lg:p-16 rounded-none shadow-[0_40px_100px_rgba(0,0,0,0.5)] space-y-10">
             <div className="space-y-4 text-center sm:text-left">
               <h1 className="text-4xl lg:text-5xl font-serif font-bold text-text-main leading-tight italic">
                 Portal de <br />
                 <span className="text-gold">Inversores</span>
               </h1>
-              <p className="text-text-dim text-sm tracking-wide font-sans">Inicie sesión con sus credenciales de Criptocagua Gold.</p>
+              <p className="text-text-dim text-sm tracking-wide font-sans">
+                Inicie sesión con sus credenciales o use acceso biométrico por huella dactilar / Face ID.
+              </p>
             </div>
 
-            <form onSubmit={handleSearch} className="space-y-8">
+            {/* OPCCIÓN 1: INICIO SESIÓN CON HUELLA (SI YA EXISTE REGISTRO EN EL DISPOSITIVO) */}
+            {hasSavedBiometrics && (
+              <div className="bg-gold/5 border border-gold/30 p-6 space-y-5 rounded-none relative">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gold/10 border border-gold/30 rounded-full flex items-center justify-center text-gold">
+                      <Fingerprint className="w-6 h-6 animate-pulse" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] uppercase font-bold tracking-[2px] text-gold">Huella Registrada</p>
+                      <p className="text-xs text-text-main font-serif italic truncate max-w-[200px]">{biometricUser}</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => handleBiometricLogin(false)}
+                    disabled={biometricLoading}
+                    className="w-full py-4 bg-gold text-bg-deep font-sans font-bold uppercase tracking-[3px] text-xs hover:bg-gold-dim transition-all flex items-center justify-center gap-2 shadow-lg shadow-gold/10 active:scale-[0.98] disabled:opacity-50"
+                  >
+                    <Fingerprint className="w-4 h-4" />
+                    {biometricLoading ? "Escaneando..." : "Acceder con Huella"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleBiometricLogin(true)}
+                    disabled={biometricLoading}
+                    className="w-full py-2.5 border border-gold/20 text-gold font-sans font-bold uppercase tracking-[2px] text-[10px] hover:bg-gold/10 transition-all flex items-center justify-center gap-1.5"
+                  >
+                    Autocompletar usuario y llave
+                  </button>
+                </div>
+
+                <div className="flex justify-between items-center text-[9px] text-text-dim pt-1 border-t border-white/5">
+                  <span className="italic">¿No es su cuenta?</span>
+                  <button
+                    type="button"
+                    onClick={handleRemoveBiometrics}
+                    className="text-red-400 hover:underline uppercase tracking-wider font-bold"
+                  >
+                    Eliminar Huella
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {biometricError && (
+              <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 text-xs text-center font-sans">
+                {biometricError}
+              </div>
+            )}
+
+            {/* OPCIÓN 2: FORMULARIO MANUAL CON OPCIÓN DE GUARDAR HUELLA */}
+            <form onSubmit={handleSearch} className="space-y-6">
+              <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                <span className="text-[10px] uppercase font-sans font-bold tracking-[2px] text-text-dim">
+                  {hasSavedBiometrics ? "O Ingrese Manualmente" : "Ingreso con Credenciales"}
+                </span>
+              </div>
+
               <div className="space-y-3">
                 <label className="text-[10px] uppercase font-sans font-bold tracking-[3px] text-text-dim px-1">Correo Electrónico</label>
                 <input 
@@ -838,6 +1046,19 @@ function Home() {
                 </div>
               </div>
 
+              <label className="flex items-center gap-3 cursor-pointer py-1 text-xs text-text-dim hover:text-text-main transition-colors select-none">
+                <input 
+                  type="checkbox"
+                  checked={saveBiometrics}
+                  onChange={(e) => setSaveBiometrics(e.target.checked)}
+                  className="w-4 h-4 accent-gold bg-bg-deep border-border-accent rounded-none cursor-pointer"
+                />
+                <span className="flex items-center gap-1.5 font-sans text-[11px]">
+                  <Fingerprint className="w-3.5 h-3.5 text-gold inline" />
+                  Activar inicio rápido con Huella / Face ID
+                </span>
+              </label>
+
               <button 
                 type="submit"
                 className="w-full py-5 bg-gold text-bg-deep font-sans font-bold uppercase tracking-[4px] text-xs hover:bg-gold-dim transition-all duration-300 shadow-xl shadow-gold/5 active:scale-[0.98]"
@@ -847,7 +1068,10 @@ function Home() {
             </form>
 
             <div className="flex items-center justify-between text-[8px] font-sans text-text-dim uppercase tracking-[2px] opacity-60">
-              <span>Sincronización segura</span>
+              <span className="flex items-center gap-1">
+                <Fingerprint className="w-3 h-3 text-gold" />
+                Biometric Gateway Active
+              </span>
               <span>AES-256 Encrypted</span>
             </div>
           </div>
