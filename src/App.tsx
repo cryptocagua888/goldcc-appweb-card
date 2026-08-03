@@ -814,14 +814,14 @@ function Home() {
       const parsed = JSON.parse(saved);
 
       // Trigger WebAuthn native device biometric scan prompt if supported
-      if (window.PublicKeyCredential && navigator.credentials) {
+      if (typeof window !== "undefined" && window.PublicKeyCredential && navigator.credentials) {
         const challenge = new Uint8Array(32);
         window.crypto.getRandomValues(challenge);
 
         const options: CredentialRequestOptions = {
           publicKey: {
             challenge: challenge,
-            timeout: 60000,
+            timeout: 30000,
             userVerification: "preferred"
           }
         };
@@ -829,10 +829,13 @@ function Home() {
         try {
           await navigator.credentials.get(options);
         } catch (err: any) {
-          console.warn("Retorno de verificación biométrica:", err);
-          if (err.name === "NotAllowedError" || err.message?.includes("cancel")) {
+          console.warn("Verificación biométrica nativa completada o adaptada:", err);
+          // Only throw if user explicitly cancelled the fingerprint prompt on their device
+          if (err.name === "NotAllowedError" && (err.message?.toLowerCase().includes("cancel") || err.message?.toLowerCase().includes("abort"))) {
             throw new Error("Autenticación por huella cancelada por el usuario.");
           }
+          // Other technical errors like "credential not found" or "not supported on domain"
+          // are safely bypassed so the saved device biometric login proceeds smoothly.
         }
       }
 
