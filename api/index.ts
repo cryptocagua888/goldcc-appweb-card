@@ -62,14 +62,14 @@ async function startServer() {
       if (!contentType || !contentType.includes("application/json")) {
         const textError = await response.text();
         if (textError.includes("Google Accounts") || textError.includes("login")) {
-          return res.status(502).json({ error: "Permisos: Configura GAS para 'Anyone'." });
+          return res.status(502).json({ error: "Error de permisos de acceso al servidor de base de datos." });
         }
-        return res.status(502).json({ error: "Google respondió con error (HTML)." });
+        return res.status(502).json({ error: "El servidor devolvió una respuesta no válida." });
       }
 
       const data = await response.json();
       if (response.status !== 200 || data.error) {
-        return res.status(400).json({ error: data.error || "Error en Google Sheets" });
+        return res.status(400).json({ error: data.error || "Error al procesar la solicitud" });
       }
 
       res.json(data);

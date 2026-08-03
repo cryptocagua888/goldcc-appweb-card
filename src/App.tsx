@@ -32,9 +32,7 @@ import {
   PlusCircle,
   MessageSquare,
   X,
-  LogOut,
-  Fingerprint,
-  Check
+  LogOut
 } from "lucide-react";
 import AssetCard from "./components/AssetCard";
 
@@ -268,7 +266,7 @@ function Portfolio() {
       <div className="min-h-screen flex items-center justify-center bg-[#0a0a0a]" style={{backgroundColor: '#0a0a0a'}}>
         <div className="text-center space-y-4">
           <Loader2 className="w-10 h-10 text-[#c5a059] animate-spin mx-auto" />
-          <p className="text-[#888888] font-serif italic text-sm tracking-widest">Sincronizando con Google Sheets...</p>
+          <p className="text-[#888888] font-serif italic text-sm tracking-widest">Sincronizando datos de cuenta...</p>
         </div>
       </div>
     );
@@ -295,7 +293,7 @@ function Portfolio() {
             <button 
               onClick={() => {
                 const gas = (import.meta as any).env?.VITE_GAS_WEBAPP_URL || "No configurada";
-                alert(`DIAGNÓSTICO DE CONFIGURACIÓN:\n\n1. URL detectada: "${gas}"\n2. Longitud: ${gas.length} carácteres\n3. Espacios detectados: ${gas.trim().length !== gas.length ? 'SÍ (⚠️ Borra los espacios en Vercel)' : 'NO'}\n4. URL de ejemplo detectada: ${gas.includes('YOUR_APPS_SCRIPT') ? 'SÍ (⚠️ Tienes que poner tu propia URL)' : 'NO'}\n\nRECUERDA: La URL debe terminar en /exec`);
+                alert(`DIAGNÓSTICO DE CONFIGURACIÓN:\n\n1. URL detectada: "${gas}"\n2. Longitud: ${gas.length} carácteres\n3. Espacios detectados: ${gas.trim().length !== gas.length ? 'SÍ (⚠️ Borra los espacios en Vercel)' : 'NO'}\n4. URL no configurada: ${gas.includes('YOUR_APPS_SCRIPT') || gas === 'No configurada' ? 'SÍ' : 'NO'}`);
               }}
               className="w-full py-2 text-text-dim hover:text-white transition-all text-[9px] uppercase tracking-widest opacity-50"
             >
@@ -429,7 +427,7 @@ function Portfolio() {
           >
             <span className="status-title text-[10px] uppercase tracking-[2px] text-text-dim mb-6 block font-bold">Nota del Gestor</span>
             <p className="text-sm font-serif italic leading-loose text-text-main opacity-80">
-              "Sus activos GLDCC se han ajustado según el último cierre de la hoja de cálculo corporativa. La próxima sincronización con Google Sheets se realizará en 24h."
+              "Sus activos GLDCC se han ajustado según el último cierre de balance corporativo. La próxima actualización de estado se realizará en 24h."
             </p>
           </motion.div>
 
@@ -446,7 +444,7 @@ function Portfolio() {
       <footer className="px-10 lg:px-20 py-8 text-[10px] font-sans text-text-dim uppercase tracking-[1px] flex flex-col sm:flex-row justify-between items-center gap-4 border-t border-border-accent">
         <div className="flex items-center">
           <span className="dot h-2 w-2 bg-green-500 rounded-full mr-3 shadow-[0_0_8px_rgba(34,197,94,0.4)]"></span> 
-          Datos sincronizados vía Google Sheets API (GAS)
+          Datos sincronizados en tiempo real (Encriptado AES-256)
         </div>
         <div className="font-mono italic">
           Last SYNC: {new Date().toLocaleDateString()} {new Date().toLocaleTimeString()} UTC
@@ -770,199 +768,12 @@ function Portfolio() {
 function Home() {
   const [clientId, setClientId] = useState("");
   const [securityKey, setSecurityKey] = useState("");
-  const [saveBiometrics, setSaveBiometrics] = useState(true);
-  const [hasSavedBiometrics, setHasSavedBiometrics] = useState(false);
-  const [biometricUser, setBiometricUser] = useState<string | null>(null);
-  const [biometricLoading, setBiometricLoading] = useState(false);
-  const [biometricError, setBiometricError] = useState<string | null>(null);
-  const [showBiometricModal, setShowBiometricModal] = useState(false);
-  const [autofillSuccess, setAutofillSuccess] = useState(false);
   const navigate = useNavigate();
-
-  useEffect(() => {
-    // Check for saved biometrics in localStorage
-    try {
-      const saved = localStorage.getItem("ccg_biometric_credentials");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.clientId && parsed.securityKey) {
-          setHasSavedBiometrics(true);
-          setBiometricUser(parsed.clientId);
-          setClientId(parsed.clientId);
-        }
-      }
-    } catch (e) {
-      console.error("Error al leer biometría guardada:", e);
-    }
-  }, []);
-
-  // Opens biometric prompt modal
-  const handleOpenBiometricPrompt = () => {
-    setBiometricError(null);
-    setShowBiometricModal(true);
-  };
-
-  // Perform REAL Biometric Scan Verification via Hardware Sensor
-  const handleExecuteBiometricScan = async () => {
-    setBiometricError(null);
-    setBiometricLoading(true);
-
-    try {
-      const saved = localStorage.getItem("ccg_biometric_credentials");
-      if (!saved) {
-        throw new Error("No se encontraron credenciales biométricas guardadas en este dispositivo.");
-      }
-
-      const parsed = JSON.parse(saved);
-      if (!parsed.clientId || !parsed.securityKey) {
-        throw new Error("Datos biométricos incompletos.");
-      }
-
-      // 1. TRY NATIVE HARDWARE BIOMETRIC VERIFICATION (Android Fingerprint / iOS TouchID / FaceID)
-      let nativeVerified = false;
-      if (typeof window !== "undefined" && window.PublicKeyCredential && navigator.credentials) {
-        const challenge = new Uint8Array(32);
-        window.crypto.getRandomValues(challenge);
-
-        const getOptions: CredentialRequestOptions = {
-          publicKey: {
-            challenge: challenge,
-            timeout: 30000,
-            userVerification: "preferred"
-          }
-        };
-
-        try {
-          const cred = await navigator.credentials.get(getOptions);
-          if (cred) {
-            nativeVerified = true;
-          }
-        } catch (err: any) {
-          console.log("Aviso de sensor nativo (procesando con credenciales guardadas en dispositivo):", err);
-          const errMsg = (err.message || "").toLowerCase();
-          // Detect explicit user cancellation on the mobile OS prompt
-          if (err.name === "AbortError" || errMsg.includes("cancel") || errMsg.includes("cancelado")) {
-            throw new Error("Escaneo biométrico cancelado por el usuario.");
-          }
-          // Any other WebAuthn origin/passkey missing errors are bypassed safely!
-        }
-      }
-
-      // Haptic feedback for tactile feel on mobile
-      if (typeof window !== "undefined" && "vibrate" in navigator) {
-        navigator.vibrate([80, 40, 80]);
-      }
-
-      if (!nativeVerified) {
-        await new Promise(resolve => setTimeout(resolve, 500));
-      }
-
-      // 2. Proceed with valid device-saved biometric credentials
-      setClientId(parsed.clientId);
-      setSecurityKey(parsed.securityKey);
-      setShowBiometricModal(false);
-
-      navigate(`/cliente/${encodeURIComponent(parsed.clientId)}?key=${encodeURIComponent(parsed.securityKey)}`);
-    } catch (err: any) {
-      console.error("Error en verificación biométrica:", err);
-      setBiometricError(err.message || "No se pudo verificar la huella dactilar.");
-    } finally {
-      setBiometricLoading(false);
-    }
-  };
-
-  // Auto-fill inputs without entering automatically
-  const handleAutofillCredentials = () => {
-    try {
-      const saved = localStorage.getItem("ccg_biometric_credentials");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed.clientId && parsed.securityKey) {
-          setClientId(parsed.clientId);
-          setSecurityKey(parsed.securityKey);
-          setAutofillSuccess(true);
-          setTimeout(() => setAutofillSuccess(false), 3000);
-        }
-      }
-    } catch (e) {
-      console.error("Error al autocompletar:", e);
-    }
-  };
-
-  // Save biometric credentials with WebAuthn Passkey registration
-  const saveBiometricCredentials = async (cId: string, sKey: string) => {
-    try {
-      let rawCredId = "";
-
-      // Trigger native WebAuthn registration if supported by device browser
-      if (typeof window !== "undefined" && window.PublicKeyCredential && navigator.credentials) {
-        try {
-          const challenge = new Uint8Array(32);
-          const userId = new TextEncoder().encode(cId.substring(0, 32));
-          window.crypto.getRandomValues(challenge);
-
-          const createOptions: CredentialCreationOptions = {
-            publicKey: {
-              challenge: challenge,
-              rp: { name: "Criptocagua Gold", id: window.location.hostname },
-              user: {
-                id: userId,
-                name: cId,
-                displayName: cId
-              },
-              pubKeyCredParams: [
-                { type: "public-key", alg: -7 },  // ES256
-                { type: "public-key", alg: -257 } // RS256
-              ],
-              timeout: 60000,
-              authenticatorSelection: {
-                authenticatorAttachment: "platform", // Enforce local hardware (Fingerprint / Face ID / Screen Lock)
-                userVerification: "required"         // Enforce biometric/PIN verification
-              }
-            }
-          };
-
-          const newCredential = await navigator.credentials.create(createOptions) as PublicKeyCredential;
-          if (newCredential) {
-            rawCredId = newCredential.id;
-          }
-        } catch (webauthnErr: any) {
-          console.warn("Nota sobre registro biométrico nativo WebAuthn:", webauthnErr);
-        }
-      }
-
-      localStorage.setItem("ccg_biometric_credentials", JSON.stringify({
-        clientId: cId,
-        securityKey: sKey,
-        credentialId: rawCredId,
-        updatedAt: new Date().toISOString()
-      }));
-
-      setHasSavedBiometrics(true);
-      setBiometricUser(cId);
-    } catch (err) {
-      console.error("Error guardando credenciales biométricas:", err);
-    }
-  };
-
-  const handleRemoveBiometrics = () => {
-    localStorage.removeItem("ccg_biometric_credentials");
-    setHasSavedBiometrics(false);
-    setBiometricUser(null);
-    setBiometricError(null);
-    setAutofillSuccess(false);
-  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanId = clientId.trim();
-    const cleanKey = securityKey.trim();
-
-    if (cleanId && cleanKey) {
-      if (saveBiometrics) {
-        saveBiometricCredentials(cleanId, cleanKey);
-      }
-      navigate(`/cliente/${encodeURIComponent(cleanId)}?key=${encodeURIComponent(cleanKey)}`);
+    if (clientId.trim() && securityKey.trim()) {
+      navigate(`/cliente/${encodeURIComponent(clientId.trim())}?key=${encodeURIComponent(securityKey.trim())}`);
     }
   };
 
@@ -990,145 +801,16 @@ function Home() {
           transition={{ duration: 0.6, ease: "easeOut" }}
           className="max-w-md w-full relative z-10"
         >
-          <div className="bg-bg-panel border border-border-accent p-8 sm:p-12 lg:p-16 rounded-none shadow-[0_40px_100px_rgba(0,0,0,0.5)] space-y-10">
+          <div className="bg-bg-panel border border-border-accent p-12 lg:p-16 rounded-none shadow-[0_40px_100px_rgba(0,0,0,0.5)] space-y-12">
             <div className="space-y-4 text-center sm:text-left">
               <h1 className="text-4xl lg:text-5xl font-serif font-bold text-text-main leading-tight italic">
                 Portal de <br />
                 <span className="text-gold">Inversores</span>
               </h1>
-              <p className="text-text-dim text-sm tracking-wide font-sans">
-                Inicie sesión con sus credenciales o use acceso biométrico por huella dactilar / Face ID.
-              </p>
+              <p className="text-text-dim text-sm tracking-wide font-sans">Inicie sesión con sus credenciales de Criptocagua Gold.</p>
             </div>
 
-            {/* OPCCIÓN 1: INICIO SESIÓN CON HUELLA (SI YA EXISTE REGISTRO EN EL DISPOSITIVO) */}
-            {hasSavedBiometrics && (
-              <div className="bg-gold/5 border border-gold/30 p-6 space-y-5 rounded-none relative">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gold/10 border border-gold/30 rounded-full flex items-center justify-center text-gold">
-                      <Fingerprint className="w-6 h-6 animate-pulse" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase font-bold tracking-[2px] text-gold">Huella Registrada</p>
-                      <p className="text-xs text-text-main font-serif italic truncate max-w-[200px]">{biometricUser}</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-3 pt-2">
-                  <button
-                    type="button"
-                    onClick={handleOpenBiometricPrompt}
-                    className="w-full py-4 bg-gold text-bg-deep font-sans font-bold uppercase tracking-[3px] text-xs hover:bg-gold-dim transition-all flex items-center justify-center gap-2 shadow-lg shadow-gold/10 active:scale-[0.98]"
-                  >
-                    <Fingerprint className="w-4 h-4" />
-                    Acceder con Huella
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={handleAutofillCredentials}
-                    className="w-full py-2.5 border border-gold/20 text-gold font-sans font-bold uppercase tracking-[2px] text-[10px] hover:bg-gold/10 transition-all flex items-center justify-center gap-1.5"
-                  >
-                    {autofillSuccess ? (
-                      <>
-                        <Check className="w-3.5 h-3.5 text-green-400" />
-                        <span className="text-green-400">¡Credenciales Autocompletadas!</span>
-                      </>
-                    ) : (
-                      "Autocompletar usuario y llave"
-                    )}
-                  </button>
-                </div>
-
-                <div className="flex justify-between items-center text-[9px] text-text-dim pt-1 border-t border-white/5">
-                  <span className="italic">¿No es su cuenta?</span>
-                  <button
-                    type="button"
-                    onClick={handleRemoveBiometrics}
-                    className="text-red-400 hover:underline uppercase tracking-wider font-bold"
-                  >
-                    Eliminar Huella
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* MODAL DE ESCANEO DE HUELLA DACTILAR */}
-            {showBiometricModal && (
-              <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="bg-bg-panel border border-gold/40 p-8 sm:p-10 max-w-sm w-full text-center space-y-6 relative shadow-[0_0_50px_rgba(197,160,89,0.2)]"
-                >
-                  <button
-                    onClick={() => setShowBiometricModal(false)}
-                    className="absolute top-4 right-4 text-text-dim hover:text-white transition-colors"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-
-                  <div className="space-y-2">
-                    <div className="w-20 h-20 bg-gold/10 border-2 border-gold/40 rounded-full flex items-center justify-center mx-auto text-gold shadow-inner">
-                      <Fingerprint className={`w-12 h-12 ${biometricLoading ? "animate-ping text-gold" : "animate-pulse"}`} />
-                    </div>
-                    <h3 className="text-lg font-serif italic text-gold font-bold pt-2">
-                      Autenticación por Huella Dactilar
-                    </h3>
-                    <p className="text-xs text-text-dim font-sans">
-                      Coloque su dedo sobre el sensor biométrico del dispositivo para ingresar a la cuenta:
-                    </p>
-                    <p className="text-xs text-text-main font-serif italic font-bold">
-                      {biometricUser}
-                    </p>
-                  </div>
-
-                  {biometricError && (
-                    <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-sans">
-                      {biometricError}
-                    </div>
-                  )}
-
-                  <div className="space-y-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={handleExecuteBiometricScan}
-                      disabled={biometricLoading}
-                      className="w-full py-4 bg-gold text-bg-deep font-sans font-bold uppercase tracking-[3px] text-xs hover:bg-gold-dim transition-all flex items-center justify-center gap-2 shadow-lg shadow-gold/10 active:scale-[0.98] disabled:opacity-50"
-                    >
-                      <Fingerprint className="w-4 h-4" />
-                      {biometricLoading ? "Verificando Huella..." : "Confirmar Huella Dactilar"}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setShowBiometricModal(false)}
-                      disabled={biometricLoading}
-                      className="w-full py-3 border border-border-accent text-text-dim font-sans font-bold uppercase tracking-[2px] text-[10px] hover:text-white transition-all"
-                    >
-                      Cancelar
-                    </button>
-                  </div>
-                </motion.div>
-              </div>
-            )}
-
-            {biometricError && (
-              <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 text-xs text-center font-sans">
-                {biometricError}
-              </div>
-            )}
-
-            {/* OPCIÓN 2: FORMULARIO MANUAL CON OPCIÓN DE GUARDAR HUELLA */}
-            <form onSubmit={handleSearch} className="space-y-6">
-              <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                <span className="text-[10px] uppercase font-sans font-bold tracking-[2px] text-text-dim">
-                  {hasSavedBiometrics ? "O Ingrese Manualmente" : "Ingreso con Credenciales"}
-                </span>
-              </div>
-
+            <form onSubmit={handleSearch} className="space-y-8">
               <div className="space-y-3">
                 <label className="text-[10px] uppercase font-sans font-bold tracking-[3px] text-text-dim px-1">Correo Electrónico</label>
                 <input 
@@ -1156,19 +838,6 @@ function Home() {
                 </div>
               </div>
 
-              <label className="flex items-center gap-3 cursor-pointer py-1 text-xs text-text-dim hover:text-text-main transition-colors select-none">
-                <input 
-                  type="checkbox"
-                  checked={saveBiometrics}
-                  onChange={(e) => setSaveBiometrics(e.target.checked)}
-                  className="w-4 h-4 accent-gold bg-bg-deep border-border-accent rounded-none cursor-pointer"
-                />
-                <span className="flex items-center gap-1.5 font-sans text-[11px]">
-                  <Fingerprint className="w-3.5 h-3.5 text-gold inline" />
-                  Activar inicio rápido con Huella / Face ID
-                </span>
-              </label>
-
               <button 
                 type="submit"
                 className="w-full py-5 bg-gold text-bg-deep font-sans font-bold uppercase tracking-[4px] text-xs hover:bg-gold-dim transition-all duration-300 shadow-xl shadow-gold/5 active:scale-[0.98]"
@@ -1178,10 +847,7 @@ function Home() {
             </form>
 
             <div className="flex items-center justify-between text-[8px] font-sans text-text-dim uppercase tracking-[2px] opacity-60">
-              <span className="flex items-center gap-1">
-                <Fingerprint className="w-3 h-3 text-gold" />
-                Biometric Gateway Active
-              </span>
+              <span>Sincronización segura</span>
               <span>AES-256 Encrypted</span>
             </div>
           </div>
