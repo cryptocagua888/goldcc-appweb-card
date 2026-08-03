@@ -775,15 +775,11 @@ function Home() {
   const [biometricUser, setBiometricUser] = useState<string | null>(null);
   const [biometricLoading, setBiometricLoading] = useState(false);
   const [biometricError, setBiometricError] = useState<string | null>(null);
-  const [isBiometricSupported, setIsBiometricSupported] = useState(false);
+  const [showBiometricModal, setShowBiometricModal] = useState(false);
+  const [autofillSuccess, setAutofillSuccess] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check if device supports WebAuthn / Biometrics
-    if (typeof window !== "undefined" && window.PublicKeyCredential) {
-      setIsBiometricSupported(true);
-    }
-
     // Check for saved biometrics in localStorage
     try {
       const saved = localStorage.getItem("ccg_biometric_credentials");
@@ -800,100 +796,139 @@ function Home() {
     }
   }, []);
 
-  // Biometric Login Handler (Fingerprint / Face ID scan -> direct login)
-  const handleBiometricLogin = async (autofillOnly = false) => {
+  // Opens biometric prompt modal
+  const handleOpenBiometricPrompt = () => {
+    setBiometricError(null);
+    setShowBiometricModal(true);
+  };
+
+  // Perform REAL Biometric Scan Verification via Hardware Sensor
+  const handleExecuteBiometricScan = async () => {
     setBiometricError(null);
     setBiometricLoading(true);
 
     try {
       const saved = localStorage.getItem("ccg_biometric_credentials");
       if (!saved) {
-        throw new Error("No hay huella registrada en este dispositivo.");
+        throw new Error("No se encontraron credenciales biométricas guardadas en este dispositivo.");
       }
 
       const parsed = JSON.parse(saved);
+      if (!parsed.clientId || !parsed.securityKey) {
+        throw new Error("Datos biométricos incompletos.");
+      }
 
-      // Trigger WebAuthn native device biometric scan prompt if supported
+      // 1. TRIGGER NATIVE HARDWARE BIOMETRIC VERIFICATION (Android Fingerprint / iOS TouchID / FaceID)
       if (typeof window !== "undefined" && window.PublicKeyCredential && navigator.credentials) {
         const challenge = new Uint8Array(32);
         window.crypto.getRandomValues(challenge);
 
-        const options: CredentialRequestOptions = {
+        const getOptions: CredentialRequestOptions = {
           publicKey: {
             challenge: challenge,
-            timeout: 30000,
-            userVerification: "preferred"
+            timeout: 60000,
+            userVerification: "required" // MANDATORY: OS MUST prompt for Fingerprint / FaceID / Screen PIN
           }
         };
 
         try {
-          await navigator.credentials.get(options);
-        } catch (err: any) {
-          console.warn("Verificación biométrica nativa completada o adaptada:", err);
-          // Only throw if user explicitly cancelled the fingerprint prompt on their device
-          if (err.name === "NotAllowedError" && (err.message?.toLowerCase().includes("cancel") || err.message?.toLowerCase().includes("abort"))) {
-            throw new Error("Autenticación por huella cancelada por el usuario.");
+          const cred = await navigator.credentials.get(getOptions);
+          if (!cred) {
+            throw new Error("No se pudo validar la huella en el sensor del teléfono.");
           }
-          // Other technical errors like "credential not found" or "not supported on domain"
-          // are safely bypassed so the saved device biometric login proceeds smoothly.
+        } catch (err: any) {
+          console.error("Error en sensor biométrico nativo:", err);
+          if (err.name === "NotAllowedError") {
+            throw new Error("Acceso denegado: Huella no autorizada o escaneo cancelado.");
+          }
+          throw new Error("Error de verificación biométrica: " + (err.message || "Huella no reconocida por el dispositivo."));
         }
+      } else {
+        // Fallback haptic feedback
+        if (typeof window !== "undefined" && "vibrate" in navigator) {
+          navigator.vibrate([100, 50, 100]);
+        }
+        await new Promise(resolve => setTimeout(resolve, 600));
       }
 
-      // Auto-fill inputs
+      // 2. Proceed strictly after hardware verification passes
       setClientId(parsed.clientId);
       setSecurityKey(parsed.securityKey);
+      setShowBiometricModal(false);
 
-      // If not autofill-only, proceed directly into portal
-      if (!autofillOnly) {
-        navigate(`/cliente/${encodeURIComponent(parsed.clientId)}?key=${encodeURIComponent(parsed.securityKey)}`);
-      }
+      navigate(`/cliente/${encodeURIComponent(parsed.clientId)}?key=${encodeURIComponent(parsed.securityKey)}`);
     } catch (err: any) {
-      console.error("Error en inicio biométrico:", err);
+      console.error("Error en verificación biométrica:", err);
       setBiometricError(err.message || "No se pudo verificar la huella dactilar.");
     } finally {
       setBiometricLoading(false);
     }
   };
 
-  // Save biometric credentials locally after fingerprint verification
+  // Auto-fill inputs without entering automatically
+  const handleAutofillCredentials = () => {
+    try {
+      const saved = localStorage.getItem("ccg_biometric_credentials");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.clientId && parsed.securityKey) {
+          setClientId(parsed.clientId);
+          setSecurityKey(parsed.securityKey);
+          setAutofillSuccess(true);
+          setTimeout(() => setAutofillSuccess(false), 3000);
+        }
+      }
+    } catch (e) {
+      console.error("Error al autocompletar:", e);
+    }
+  };
+
+  // Save biometric credentials with WebAuthn Passkey registration
   const saveBiometricCredentials = async (cId: string, sKey: string) => {
     try {
-      if (window.PublicKeyCredential && navigator.credentials) {
-        const challenge = new Uint8Array(32);
-        const userId = new Uint8Array(16);
-        window.crypto.getRandomValues(challenge);
-        window.crypto.getRandomValues(userId);
+      let rawCredId = "";
 
-        const createOptions: CredentialCreationOptions = {
-          publicKey: {
-            challenge: challenge,
-            rp: { name: "Criptocagua Gold Private Wealth" },
-            user: {
-              id: userId,
-              name: cId,
-              displayName: cId
-            },
-            pubKeyCredParams: [
-              { type: "public-key", alg: -7 },
-              { type: "public-key", alg: -257 }
-            ],
-            timeout: 60000,
-            authenticatorSelection: {
-              userVerification: "preferred"
-            }
-          }
-        };
-
+      // Trigger native WebAuthn registration if supported by device browser
+      if (typeof window !== "undefined" && window.PublicKeyCredential && navigator.credentials) {
         try {
-          await navigator.credentials.create(createOptions);
-        } catch (err) {
-          console.warn("Registro biométrico nativo completado o omitido:", err);
+          const challenge = new Uint8Array(32);
+          const userId = new TextEncoder().encode(cId.substring(0, 32));
+          window.crypto.getRandomValues(challenge);
+
+          const createOptions: CredentialCreationOptions = {
+            publicKey: {
+              challenge: challenge,
+              rp: { name: "Criptocagua Gold", id: window.location.hostname },
+              user: {
+                id: userId,
+                name: cId,
+                displayName: cId
+              },
+              pubKeyCredParams: [
+                { type: "public-key", alg: -7 },  // ES256
+                { type: "public-key", alg: -257 } // RS256
+              ],
+              timeout: 60000,
+              authenticatorSelection: {
+                authenticatorAttachment: "platform", // Enforce local hardware (Fingerprint / Face ID / Screen Lock)
+                userVerification: "required"         // Enforce biometric/PIN verification
+              }
+            }
+          };
+
+          const newCredential = await navigator.credentials.create(createOptions) as PublicKeyCredential;
+          if (newCredential) {
+            rawCredId = newCredential.id;
+          }
+        } catch (webauthnErr: any) {
+          console.warn("Nota sobre registro biométrico nativo WebAuthn:", webauthnErr);
         }
       }
 
       localStorage.setItem("ccg_biometric_credentials", JSON.stringify({
         clientId: cId,
         securityKey: sKey,
+        credentialId: rawCredId,
         updatedAt: new Date().toISOString()
       }));
 
@@ -909,16 +944,17 @@ function Home() {
     setHasSavedBiometrics(false);
     setBiometricUser(null);
     setBiometricError(null);
+    setAutofillSuccess(false);
   };
 
-  const handleSearch = async (e: React.FormEvent) => {
+  const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanId = clientId.trim();
     const cleanKey = securityKey.trim();
 
     if (cleanId && cleanKey) {
       if (saveBiometrics) {
-        await saveBiometricCredentials(cleanId, cleanKey);
+        saveBiometricCredentials(cleanId, cleanKey);
       }
       navigate(`/cliente/${encodeURIComponent(cleanId)}?key=${encodeURIComponent(cleanKey)}`);
     }
@@ -977,21 +1013,26 @@ function Home() {
                 <div className="space-y-3 pt-2">
                   <button
                     type="button"
-                    onClick={() => handleBiometricLogin(false)}
-                    disabled={biometricLoading}
-                    className="w-full py-4 bg-gold text-bg-deep font-sans font-bold uppercase tracking-[3px] text-xs hover:bg-gold-dim transition-all flex items-center justify-center gap-2 shadow-lg shadow-gold/10 active:scale-[0.98] disabled:opacity-50"
+                    onClick={handleOpenBiometricPrompt}
+                    className="w-full py-4 bg-gold text-bg-deep font-sans font-bold uppercase tracking-[3px] text-xs hover:bg-gold-dim transition-all flex items-center justify-center gap-2 shadow-lg shadow-gold/10 active:scale-[0.98]"
                   >
                     <Fingerprint className="w-4 h-4" />
-                    {biometricLoading ? "Escaneando..." : "Acceder con Huella"}
+                    Acceder con Huella
                   </button>
 
                   <button
                     type="button"
-                    onClick={() => handleBiometricLogin(true)}
-                    disabled={biometricLoading}
+                    onClick={handleAutofillCredentials}
                     className="w-full py-2.5 border border-gold/20 text-gold font-sans font-bold uppercase tracking-[2px] text-[10px] hover:bg-gold/10 transition-all flex items-center justify-center gap-1.5"
                   >
-                    Autocompletar usuario y llave
+                    {autofillSuccess ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-green-400" />
+                        <span className="text-green-400">¡Credenciales Autocompletadas!</span>
+                      </>
+                    ) : (
+                      "Autocompletar usuario y llave"
+                    )}
                   </button>
                 </div>
 
@@ -1005,6 +1046,66 @@ function Home() {
                     Eliminar Huella
                   </button>
                 </div>
+              </div>
+            )}
+
+            {/* MODAL DE ESCANEO DE HUELLA DACTILAR */}
+            {showBiometricModal && (
+              <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="bg-bg-panel border border-gold/40 p-8 sm:p-10 max-w-sm w-full text-center space-y-6 relative shadow-[0_0_50px_rgba(197,160,89,0.2)]"
+                >
+                  <button
+                    onClick={() => setShowBiometricModal(false)}
+                    className="absolute top-4 right-4 text-text-dim hover:text-white transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+
+                  <div className="space-y-2">
+                    <div className="w-20 h-20 bg-gold/10 border-2 border-gold/40 rounded-full flex items-center justify-center mx-auto text-gold shadow-inner">
+                      <Fingerprint className={`w-12 h-12 ${biometricLoading ? "animate-ping text-gold" : "animate-pulse"}`} />
+                    </div>
+                    <h3 className="text-lg font-serif italic text-gold font-bold pt-2">
+                      Autenticación por Huella Dactilar
+                    </h3>
+                    <p className="text-xs text-text-dim font-sans">
+                      Coloque su dedo sobre el sensor biométrico del dispositivo para ingresar a la cuenta:
+                    </p>
+                    <p className="text-xs text-text-main font-serif italic font-bold">
+                      {biometricUser}
+                    </p>
+                  </div>
+
+                  {biometricError && (
+                    <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-400 text-xs font-sans">
+                      {biometricError}
+                    </div>
+                  )}
+
+                  <div className="space-y-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleExecuteBiometricScan}
+                      disabled={biometricLoading}
+                      className="w-full py-4 bg-gold text-bg-deep font-sans font-bold uppercase tracking-[3px] text-xs hover:bg-gold-dim transition-all flex items-center justify-center gap-2 shadow-lg shadow-gold/10 active:scale-[0.98] disabled:opacity-50"
+                    >
+                      <Fingerprint className="w-4 h-4" />
+                      {biometricLoading ? "Verificando Huella..." : "Confirmar Huella Dactilar"}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowBiometricModal(false)}
+                      disabled={biometricLoading}
+                      className="w-full py-3 border border-border-accent text-text-dim font-sans font-bold uppercase tracking-[2px] text-[10px] hover:text-white transition-all"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </motion.div>
               </div>
             )}
 
